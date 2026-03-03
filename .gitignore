@@ -1,0 +1,31 @@
+# Output files - excluded from version control
+S360_Home.html
+S360_Home.json
+S360_Home.md
+
+# Archive files
+contacts_handled.zip
+*.zip
+
+# Generated output file types
+*.html
+*.json
+
+# Claude session data
+.claude/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS files
+.DS_Store
+Thumbs.db
