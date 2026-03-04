@@ -22,6 +22,7 @@ TOOLS = [
     "Export Flow",
     "Flow to Chart",
     "Log Insights",
+    "CID Journey",
 ]
 
 _PLACEHOLDER_RE = re.compile(r"\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}")
@@ -438,6 +439,26 @@ def tool_log_insights():
 
     _run("log_insights.py", args)
 
+    # After a CID_Search run, offer to generate the journey map
+    if "CID" in ph_values and output and output.endswith(".xlsx"):
+        if ask_bool("Generate journey map from this xlsx?"):
+            map_output = output.replace(".xlsx", "_journey.html")
+            _run("cid_journey.py", [output, "--output", map_output])
+
+
+# ── Tool: CID Journey ─────────────────────────────────────────────────────────
+
+def tool_cid_journey():
+    _header("CID Journey")
+    xlsx_file = ask("xlsx file path (from CID_Search Log Insights run)")
+    output    = ask("Output HTML file", required=False)
+
+    args = [xlsx_file]
+    if output:
+        args += ["--output", output]
+
+    _run("cid_journey.py", args)
+
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 
@@ -448,6 +469,7 @@ RUNNERS = [
     tool_export_flow,
     tool_flow_to_chart,
     tool_log_insights,
+    tool_cid_journey,
 ]
 
 
