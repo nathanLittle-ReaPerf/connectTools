@@ -379,8 +379,10 @@ def tool_log_insights():
     _header("Log Insights", names[idx])
 
     var_args: list[str] = []
+    ph_values: dict[str, str] = {}
     for ph in placeholders:
         val = ask(ph.replace("_", " "))
+        ph_values[ph] = val
         var_args += ["--var", f"{ph}={val}"]
 
     # ── Column selection ──────────────────────────────────────────────────────
@@ -418,7 +420,14 @@ def tool_log_insights():
     region    = ask("Region",     required=False)
     log_group = ask("Log group",  required=False)
     limit     = ask("Max rows",   required=False, default="1000")
-    output    = ask("Output file", required=False)
+
+    # Auto-name output for CID searches: CID-<value>_YYYY-MM-DD.xlsx
+    if "CID" in ph_values:
+        import datetime as _dt
+        today  = _dt.date.today().strftime("%Y-%m-%d")
+        output = f"CID-{ph_values['CID']}_{today}.xlsx"
+    else:
+        output = ask("Output file", required=False)
 
     # ── Build and run ─────────────────────────────────────────────────────────
     args = ["--query", str(query_path)] + var_args + time_args
