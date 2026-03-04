@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import os
 import re
 import subprocess
@@ -12,6 +13,7 @@ from pathlib import Path
 SCRIPT_DIR  = Path(__file__).parent
 QUERIES_DIR = SCRIPT_DIR / "queries"
 TITLE       = "Amazon Connect Tools"
+LOG_FILE    = Path.home() / "logs" / "connecttools.log"
 
 TOOLS = [
     "Contacts Handled",
@@ -146,13 +148,34 @@ def ask_bool(label: str, default: bool = False) -> bool:
     return default if not val else val in ("y", "yes")
 
 
-# ── Tool runner ───────────────────────────────────────────────────────────────
+# ── Tool runner + logging ─────────────────────────────────────────────────────
+
+def _log(script: str, args: list[str], returncode: int, elapsed: float):
+    try:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tool   = script.replace(".py", "")
+        status = f"exit={returncode}"
+        if returncode != 0:
+            status += "  ERROR"
+        line = (
+            f"{dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            f"  {tool:<22}  {status:<16}  {elapsed:.1f}s"
+            f"  {' '.join(args)}\n"
+        )
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception:
+        pass  # never let logging break the launcher
+
 
 def _run(script: str, args: list[str]):
     print()
     print("  " + "─" * 40)
     print()
-    subprocess.run([sys.executable, str(SCRIPT_DIR / script)] + args)
+    start  = dt.datetime.now()
+    result = subprocess.run([sys.executable, str(SCRIPT_DIR / script)] + args)
+    elapsed = (dt.datetime.now() - start).total_seconds()
+    _log(script, args, result.returncode, elapsed)
     print()
     print("  " + "─" * 40)
     input("  Press Enter to return to menu…")
