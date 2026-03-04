@@ -18,7 +18,7 @@ python connectToolbox.py
 |---|---|
 | `↑` / `↓` | Move selection |
 | `Enter` | Run selected tool |
-| `1` – `4` | Jump directly to a tool |
+| `1` – `6` | Jump directly to a tool |
 | `q` | Quit |
 
 ## Tools
@@ -27,8 +27,10 @@ python connectToolbox.py
 |---|---|---|
 | 1 | Contacts Handled | `contacts_handled.py` |
 | 2 | Contact Inspect | `contact_inspect.py` |
-| 3 | Export Flow | `export_flow.py` |
-| 4 | Flow to Chart | `flow_to_chart.py` |
+| 3 | Contact Search | `contact_search.py` |
+| 4 | Export Flow | `export_flow.py` |
+| 5 | Flow to Chart | `flow_to_chart.py` |
+| 6 | Log Insights | `log_insights.py` |
 
 After selecting a tool, the menu prompts for each argument one at a time. Optional fields can be left blank to use defaults. When the tool finishes, press Enter to return to the menu.
 
@@ -38,9 +40,13 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 
 **Contact Inspect** — Instance ID, Contact ID, Region, Include transcript (y/n)
 
+**Contact Search** — Instance ID, Start date, End date, Region, optional filters (channel, initiation method, queue ID, contact attribute), max contacts, output file
+
 **Export Flow** — Instance ID, Region, optionally list flows first, Flow name, Exact match (y/n), Output file
 
 **Flow to Chart** — Flow JSON file path, Format (html / mermaid / dot), Output file
+
+**Log Insights** — Pick a saved query from the `queries/` folder, fill in any placeholders, optionally customize columns, choose a time range (relative or date range), Region, Log group, Max rows, Output file
 
 ## Platform Support
 

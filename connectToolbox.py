@@ -16,6 +16,7 @@ TITLE       = "Amazon Connect Tools"
 TOOLS = [
     "Contacts Handled",
     "Contact Inspect",
+    "Contact Search",
     "Export Flow",
     "Flow to Chart",
     "Log Insights",
@@ -188,6 +189,54 @@ def tool_contact_inspect():
     if trans:  args += ["--transcript"]
 
     _run("contact_inspect.py", args)
+
+
+# ── Tool: Contact Search ──────────────────────────────────────────────────────
+
+def tool_contact_search():
+    _header("Contact Search")
+    iid    = ask("Instance ID")
+    start  = ask("Start (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)")
+    end    = ask("End   (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)")
+    region = ask("Region", required=False)
+
+    args = ["--instance-id", iid, "--start", start, "--end", end]
+    if region:
+        args += ["--region", region]
+
+    if ask_bool("Filter by channel?"):
+        ch = ask_choice("Channel", VALID_CHANNELS_CS, default="VOICE")
+        args += ["--channel", ch]
+
+    if ask_bool("Filter by initiation method?"):
+        method = ask_choice(
+            "Initiation method",
+            ["INBOUND", "OUTBOUND", "TRANSFER", "CALLBACK", "API",
+             "QUEUE_TRANSFER", "EXTERNAL_OUTBOUND", "MONITOR", "DISCONNECT"],
+            default="INBOUND",
+        )
+        args += ["--initiation-method", method]
+
+    if ask_bool("Filter by queue ID?"):
+        qid = ask("Queue ID")
+        args += ["--queue", qid]
+
+    if ask_bool("Filter by contact attribute?"):
+        kv = ask("Attribute (KEY=VALUE)")
+        args += ["--attribute", kv]
+
+    limit = ask("Max contacts to return", required=False)
+    if limit:
+        args += ["--limit", limit]
+
+    output = ask("Output CSV file", required=False)
+    if output:
+        args += ["--output", output]
+
+    _run("contact_search.py", args)
+
+
+VALID_CHANNELS_CS = ["VOICE", "CHAT", "TASK", "EMAIL"]
 
 
 # ── Tool: Export Flow ─────────────────────────────────────────────────────────
@@ -363,6 +412,7 @@ def tool_log_insights():
 RUNNERS = [
     tool_contacts_handled,
     tool_contact_inspect,
+    tool_contact_search,
     tool_export_flow,
     tool_flow_to_chart,
     tool_log_insights,
