@@ -21,9 +21,10 @@ try:
 except ImportError:
     HAS_OPENPYXL = False
 
-RETRY_CONFIG   = Config(retries={"max_attempts": 5, "mode": "adaptive"})
-POLL_INTERVAL  = 2   # seconds between status checks
-LOG_PREFIX     = "/aws/connect/"
+RETRY_CONFIG      = Config(retries={"max_attempts": 5, "mode": "adaptive"})
+POLL_INTERVAL     = 2   # seconds between status checks
+LOG_PREFIX        = "/aws/connect/"
+_PLACEHOLDER_RE   = re.compile(r"\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}")
 
 
 # ── AWS client ────────────────────────────────────────────────────────────────
@@ -264,6 +265,8 @@ examples:
     p.add_argument("--limit",     type=int, default=1000, metavar="N",
                    help="Max rows returned (default: 1000, max: 10000)")
     p.add_argument("--output",    metavar="FILE",     help="Output .xlsx path (default: results_<timestamp>.xlsx)")
+    p.add_argument("--var",       metavar="KEY=VALUE", action="append",
+                   help="Substitute a { KEY } placeholder in the query (repeatable)")
     p.add_argument("--list-logs", action="store_true", help="List /aws/connect/ log groups and exit")
     p.add_argument("--region",    default=None,       help="AWS region (defaults to session/CloudShell region)")
     p.add_argument("--profile",   default=None,       help="AWS named profile")
@@ -310,6 +313,24 @@ def main():
         print(f"Error: query file not found: {query_path}", file=sys.stderr)
         sys.exit(1)
     query_str = query_path.read_text(encoding="utf-8").strip()
+
+    # Substitute --var KEY=VALUE placeholders
+    var_map: dict[str, str] = {}
+    for entry in (args.var or []):
+        if "=" not in entry:
+            print(f"Error: --var must be KEY=VALUE, got '{entry}'", file=sys.stderr)
+            sys.exit(1)
+        k, v = entry.split("=", 1)
+        var_map[k.strip()] = v.strip()
+    if var_map:
+        query_str = _PLACEHOLDER_RE.sub(
+            lambda m: var_map.get(m.group(1), m.group(0)), query_str
+        )
+    unresolved = _PLACEHOLDER_RE.findall(query_str)
+    if unresolved:
+        print(f"Error: unresolved placeholder(s) in query: {', '.join(unresolved)}", file=sys.stderr)
+        print("  Pass values with --var KEY=VALUE", file=sys.stderr)
+        sys.exit(1)
 
     log_group          = resolve_log_group(logs, args.log_group)
     start_ts, end_ts   = resolve_time_range(args)

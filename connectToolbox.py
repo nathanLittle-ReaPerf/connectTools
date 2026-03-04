@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
-"""menu.py — Interactive launcher for Amazon Connect Tools."""
+"""connectToolbox.py — Interactive launcher for Amazon Connect Tools."""
 
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_DIR = Path(__file__).parent
-TITLE      = "Amazon Connect Tools"
+SCRIPT_DIR  = Path(__file__).parent
+QUERIES_DIR = SCRIPT_DIR / "queries"
+TITLE       = "Amazon Connect Tools"
 
 TOOLS = [
     "Contacts Handled",
     "Contact Inspect",
     "Export Flow",
     "Flow to Chart",
+    "Log Insights",
 ]
+
+_PLACEHOLDER_RE = re.compile(r"\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}")
 
 
 # ── Raw keypress reader (cross-platform) ──────────────────────────────────────
@@ -26,12 +31,12 @@ if sys.platform == "win32":
 
     def getch() -> bytes:
         ch = msvcrt.getch()
-        if ch in (b"\x00", b"\xe0"):   # special key prefix on Windows
+        if ch in (b"\x00", b"\xe0"):
             ch = b"\xe0" + msvcrt.getch()
         return ch
 
-    UP   = b"\xe0H"
-    DOWN = b"\xe0P"
+    UP    = b"\xe0H"
+    DOWN  = b"\xe0P"
     CLEAR = "cls"
 else:
     import os as _os
@@ -53,52 +58,57 @@ else:
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
-    UP   = b"\x1b[A"
-    DOWN = b"\x1b[B"
+    UP    = b"\x1b[A"
+    DOWN  = b"\x1b[B"
     CLEAR = "clear"
 
-QUIT = (b"q", b"Q", b"\x03")   # q, Q, Ctrl-C
+QUIT = (b"q", b"Q", b"\x03")
 
 
-# ── Main menu ─────────────────────────────────────────────────────────────────
+# ── Generic arrow-key menu ────────────────────────────────────────────────────
 
-def _draw_menu(selected: int):
-    os.system(CLEAR)
-    print(f"\n  {TITLE}")
-    print("  " + "─" * 36)
-    print()
-    for i, name in enumerate(TOOLS):
-        if i == selected:
-            print(f"  \033[7m  {i + 1}.  {name:<22}\033[0m")
-        else:
-            print(f"     {i + 1}.  {name}")
-    print()
-    print("  \033[90m[↑↓] navigate  [Enter / 1-4] select  [q] quit\033[0m")
-
-
-def main_menu() -> int | None:
-    """Show the arrow-key menu. Returns 0-based tool index or None to quit."""
+def pick_menu(title: str, options: list[str], quit_label: str = "back") -> int | None:
+    """Arrow-key or number selection. Returns 0-based index or None to go back/quit."""
     selected = 0
+    n = len(options)
     while True:
-        _draw_menu(selected)
+        os.system(CLEAR)
+        print(f"\n  {title}")
+        print("  " + "─" * max(40, len(title) + 2))
+        print()
+        for i, name in enumerate(options):
+            num = str(i + 1) if i < 9 else " "
+            if i == selected:
+                print(f"  \033[7m  {num}.  {name:<30}\033[0m")
+            else:
+                print(f"     {num}.  {name}")
+        print()
+        print(f"  \033[90m[↑↓] navigate  [Enter/1-{min(n, 9)}] select  [q] {quit_label}\033[0m")
+
         key = getch()
         if key in QUIT:
             return None
         if key == UP:
-            selected = (selected - 1) % len(TOOLS)
+            selected = (selected - 1) % n
         elif key == DOWN:
-            selected = (selected + 1) % len(TOOLS)
+            selected = (selected + 1) % n
         elif key in (b"\r", b"\n"):
             return selected
-        elif key in (b"1", b"2", b"3", b"4"):
-            return int(key.decode()) - 1
+        elif len(key) == 1 and b"1" <= key <= b"9":
+            i = int(key.decode()) - 1
+            if i < n:
+                return i
+
+
+def main_menu() -> int | None:
+    return pick_menu(TITLE, TOOLS, quit_label="quit")
 
 
 # ── Prompt helpers ────────────────────────────────────────────────────────────
 
-def _header(tool_name: str):
+def _header(*crumbs: str):
     os.system(CLEAR)
-    print(f"\n  {TITLE}  ›  {tool_name}")
+    print(f"\n  {TITLE}  ›  {'  ›  '.join(crumbs)}")
     print("  " + "─" * 40)
     print()
 
@@ -135,10 +145,9 @@ def ask_bool(label: str, default: bool = False) -> bool:
     return default if not val else val in ("y", "yes")
 
 
-# ── Tool launchers ────────────────────────────────────────────────────────────
+# ── Tool runner ───────────────────────────────────────────────────────────────
 
 def _run(script: str, args: list[str]):
-    """Execute a tool script and wait; then pause before returning to menu."""
     print()
     print("  " + "─" * 40)
     print()
@@ -147,6 +156,8 @@ def _run(script: str, args: list[str]):
     print("  " + "─" * 40)
     input("  Press Enter to return to menu…")
 
+
+# ── Tool: Contacts Handled ────────────────────────────────────────────────────
 
 def tool_contacts_handled():
     _header("Contacts Handled")
@@ -163,6 +174,8 @@ def tool_contacts_handled():
     _run("contacts_handled.py", args)
 
 
+# ── Tool: Contact Inspect ─────────────────────────────────────────────────────
+
 def tool_contact_inspect():
     _header("Contact Inspect")
     iid    = ask("Instance ID")
@@ -176,6 +189,8 @@ def tool_contact_inspect():
 
     _run("contact_inspect.py", args)
 
+
+# ── Tool: Export Flow ─────────────────────────────────────────────────────────
 
 def tool_export_flow():
     _header("Export Flow")
@@ -202,6 +217,8 @@ def tool_export_flow():
     _run("export_flow.py", args)
 
 
+# ── Tool: Flow to Chart ───────────────────────────────────────────────────────
+
 def tool_flow_to_chart():
     _header("Flow to Chart")
     flow_file = ask("Flow JSON file path")
@@ -215,11 +232,140 @@ def tool_flow_to_chart():
     _run("flow_to_chart.py", args)
 
 
+# ── Tool: Log Insights ────────────────────────────────────────────────────────
+
+def _list_queries() -> list[Path]:
+    if not QUERIES_DIR.exists():
+        return []
+    return sorted(p for p in QUERIES_DIR.iterdir() if p.suffix in (".sql", ".txt"))
+
+
+def _display_name(path: Path) -> str:
+    """CID_Search.sql → CID Search"""
+    return path.stem.replace("_", " ")
+
+
+def _parse_display_columns(query: str) -> list[str] | None:
+    """Extract column names from the | display line, or None if not present."""
+    m = re.search(r"^\s*\|\s*display\s+(.+)$", query, re.IGNORECASE | re.MULTILINE)
+    if not m:
+        return None
+    return [c.strip() for c in m.group(1).split(",") if c.strip()]
+
+
+def _select_columns(columns: list[str]) -> list[str]:
+    """Let the user exclude columns by number. Returns the kept columns."""
+    print("  Columns to include (type a number to exclude, blank when done):\n")
+    excluded: set[int] = set()
+    for i, col in enumerate(columns, 1):
+        print(f"    {i:2}.  {col}")
+    print()
+    while True:
+        val = input("  Exclude # (or blank to finish): ").strip()
+        if not val:
+            break
+        if val.isdigit() and 1 <= int(val) <= len(columns):
+            idx = int(val) - 1
+            excluded.add(idx)
+            print(f"  \033[90m  ✕ {columns[idx]}\033[0m")
+        else:
+            print(f"  \033[33m  Enter a number 1–{len(columns)}\033[0m")
+    return [c for i, c in enumerate(columns) if i not in excluded]
+
+
+def _rewrite_display(query: str, columns: list[str]) -> str:
+    """Replace the | display line with the given columns."""
+    new_display = "| display " + ", ".join(columns)
+    return re.sub(
+        r"^\s*\|\s*display\s+.+$", new_display, query,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+
+def tool_log_insights():
+    # ── Pick a query ──────────────────────────────────────────────────────────
+    queries = _list_queries()
+
+    if not queries:
+        _header("Log Insights")
+        print("  No query files found.")
+        print(f"  Add .sql or .txt files to:  {QUERIES_DIR}")
+        input("\n  Press Enter to return…")
+        return
+
+    names = [_display_name(q) for q in queries]
+    idx   = pick_menu(f"{TITLE}  ›  Log Insights", names, quit_label="back")
+    if idx is None:
+        return
+
+    query_path = queries[idx]
+    query_text = query_path.read_text(encoding="utf-8").strip()
+
+    # ── Prompt for placeholders ───────────────────────────────────────────────
+    placeholders = list(dict.fromkeys(_PLACEHOLDER_RE.findall(query_text)))
+
+    _header("Log Insights", names[idx])
+
+    var_args: list[str] = []
+    for ph in placeholders:
+        val = ask(ph.replace("_", " "))
+        var_args += ["--var", f"{ph}={val}"]
+
+    # ── Column selection ──────────────────────────────────────────────────────
+    columns = _parse_display_columns(query_text)
+
+    if columns and ask_bool("Customize columns?"):
+        print()
+        kept = _select_columns(columns)
+        if kept and kept != columns:
+            # Write a temp file with the modified display line;
+            # placeholders are still present — log_insights.py will resolve via --var
+            import tempfile
+            tmp = tempfile.NamedTemporaryFile(
+                mode="w", suffix=".sql", delete=False, encoding="utf-8"
+            )
+            tmp.write(_rewrite_display(query_text, kept))
+            tmp.close()
+            query_path = Path(tmp.name)
+        print()
+
+    # ── Time range ────────────────────────────────────────────────────────────
+    time_choice = ask_choice("Time range", ["Relative (e.g. 24h, 7d)", "Date range"], default="Relative (e.g. 24h, 7d)")
+    time_args: list[str] = []
+    if "Date" in time_choice:
+        start = ask("Start (YYYY-MM-DD or 'YYYY-MM-DD HH:MM')")
+        end   = ask("End", required=False)
+        time_args = ["--start", start]
+        if end:
+            time_args += ["--end", end]
+    else:
+        last = ask("Duration", default="24h")
+        time_args = ["--last", last]
+
+    # ── Other options ─────────────────────────────────────────────────────────
+    region    = ask("Region",     required=False)
+    log_group = ask("Log group",  required=False)
+    limit     = ask("Max rows",   required=False, default="1000")
+    output    = ask("Output file", required=False)
+
+    # ── Build and run ─────────────────────────────────────────────────────────
+    args = ["--query", str(query_path)] + var_args + time_args
+    if region:         args += ["--region",     region]
+    if log_group:      args += ["--log-group",  log_group]
+    if limit != "1000": args += ["--limit",     limit]
+    if output:         args += ["--output",     output]
+
+    _run("log_insights.py", args)
+
+
+# ── Dispatch ──────────────────────────────────────────────────────────────────
+
 RUNNERS = [
     tool_contacts_handled,
     tool_contact_inspect,
     tool_export_flow,
     tool_flow_to_chart,
+    tool_log_insights,
 ]
 
 
