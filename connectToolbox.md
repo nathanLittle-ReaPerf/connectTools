@@ -48,6 +48,19 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 
 **Log Insights** — Pick a saved query from the `queries/` folder, fill in any placeholders, optionally customize columns, choose a time range (relative or date range), Region, Log group, Max rows, Output file
 
+## Logging
+
+Every tool run is appended to `~/logs/connecttools.log`. The `logs/` directory is created automatically on first run.
+
+Each line contains:
+
+```
+2026-03-04 14:32:01  contact_search        exit=0             12.3s  --instance-id f79da75c --start 2026-03-01 --end 2026-03-02
+2026-03-04 14:45:18  contact_inspect       exit=1  ERROR      0.4s   --instance-id f79da75c --contact-id abc123
+```
+
+Fields: timestamp, tool name, exit code (non-zero runs are flagged `ERROR`), duration, full argument list.
+
 ## Platform Support
 
 Works on both Windows (local) and Linux (AWS CloudShell). Arrow key handling uses `msvcrt` on Windows and `termios` on Linux — no install required on either platform.
