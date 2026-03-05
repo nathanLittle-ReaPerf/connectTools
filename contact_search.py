@@ -87,6 +87,8 @@ examples:
                    help="Filter by queue ID (repeatable)")
     p.add_argument("--agent",  action="append", dest="agents",  metavar="ID",
                    help="Filter by agent user ID (repeatable)")
+    p.add_argument("--agent-login", action="append", dest="agent_logins", metavar="LOGIN",
+                   help="Filter by agent login/username (repeatable); resolved to user ID automatically")
     p.add_argument("--initiation-method", action="append", dest="initiation_methods",
                    metavar="METHOD", choices=VALID_INITIATION_METHODS,
                    help=(f"Filter by initiation method (repeatable). "
@@ -131,6 +133,39 @@ def parse_datetime(s: str) -> dt.datetime:
         except ValueError:
             continue
     raise ValueError(f"Cannot parse {s!r}. Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS (UTC).")
+
+
+# ── Agent login resolution ────────────────────────────────────────────────────
+
+def resolve_agent_logins(client, instance_id: str, logins: list[str]) -> list[str]:
+    """Return user IDs for a list of login names. Exits on any unresolved name."""
+    username_to_id: dict[str, str] = {}
+    token = None
+    while True:
+        kwargs = {"InstanceId": instance_id, "MaxResults": 100}
+        if token:
+            kwargs["NextToken"] = token
+        try:
+            resp = client.list_users(**kwargs)
+        except ClientError as e:
+            code = e.response["Error"]["Code"]
+            msg  = e.response["Error"]["Message"]
+            print(f"Error listing users [{code}]: {msg}", file=sys.stderr)
+            sys.exit(1)
+        for u in resp.get("UserSummaryList", []):
+            username_to_id[u["Username"]] = u["Id"]
+        token = resp.get("NextToken")
+        if not token:
+            break
+
+    ids = []
+    for login in logins:
+        uid = username_to_id.get(login)
+        if not uid:
+            print(f"Error: agent login {login!r} not found in this instance.", file=sys.stderr)
+            sys.exit(1)
+        ids.append(uid)
+    return ids
 
 
 # ── Search criteria builder ───────────────────────────────────────────────────
@@ -285,8 +320,13 @@ def main():
         print("Error: --start must be before --end.", file=sys.stderr)
         sys.exit(1)
 
-    limit    = args.limit if args.limit and args.limit > 0 else None
-    client   = make_client(args.region, args.profile)
+    limit  = args.limit if args.limit and args.limit > 0 else None
+    client = make_client(args.region, args.profile)
+
+    if args.agent_logins:
+        resolved = resolve_agent_logins(client, args.instance_id, args.agent_logins)
+        args.agents = (args.agents or []) + resolved
+
     criteria = build_criteria(args)
 
     time_range = {"Type": args.time_type, "StartTime": start, "EndTime": end}

@@ -23,6 +23,7 @@ TOOLS = [
     "Flow to Chart",
     "Log Insights",
     "CID Journey",
+    "Agent Activity",
 ]
 
 _PLACEHOLDER_RE = re.compile(r"\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}")
@@ -241,6 +242,10 @@ def tool_contact_search():
         )
         args += ["--initiation-method", method]
 
+    if ask_bool("Filter by agent login?"):
+        login = ask("Agent login")
+        args += ["--agent-login", login]
+
     if ask_bool("Filter by queue ID?"):
         qid = ask("Queue ID")
         args += ["--queue", qid]
@@ -355,29 +360,56 @@ def _rewrite_display(query: str, columns: list[str]) -> str:
     )
 
 
+def _read_adhoc_query() -> str | None:
+    """Prompt the user to paste a multi-line query. Returns text or None to cancel."""
+    _header("Log Insights", "Ad Hoc Query")
+    print("  Paste your query below, then press Ctrl+D (Linux/CloudShell) or Ctrl+Z Enter (Windows).")
+    print("  \033[90m  (type 'cancel' on its own line to go back)\033[0m\n")
+    lines: list[str] = []
+    try:
+        while True:
+            line = input()
+            if line.strip().lower() == "cancel":
+                return None
+            lines.append(line)
+    except EOFError:
+        pass
+    return "\n".join(lines).strip() or None
+
+
 def tool_log_insights():
     # ── Pick a query ──────────────────────────────────────────────────────────
     queries = _list_queries()
+    AD_HOC  = "Ad Hoc Query"
 
-    if not queries:
-        _header("Log Insights")
-        print("  No query files found.")
-        print(f"  Add .sql or .txt files to:  {QUERIES_DIR}")
-        input("\n  Press Enter to return…")
-        return
-
-    names = [_display_name(q) for q in queries]
+    names = [AD_HOC] + [_display_name(q) for q in queries]
     idx   = pick_menu(f"{TITLE}  ›  Log Insights", names, quit_label="back")
     if idx is None:
         return
 
-    query_path = queries[idx]
-    query_text = query_path.read_text(encoding="utf-8").strip()
+    import tempfile
+
+    if idx == 0:
+        # Ad hoc path — paste query directly
+        query_text = _read_adhoc_query()
+        if not query_text:
+            return
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".sql", delete=False, encoding="utf-8"
+        )
+        tmp.write(query_text)
+        tmp.close()
+        query_path = Path(tmp.name)
+        query_name = "Ad Hoc"
+    else:
+        query_path = queries[idx - 1]
+        query_text = query_path.read_text(encoding="utf-8").strip()
+        query_name = names[idx]
 
     # ── Prompt for placeholders ───────────────────────────────────────────────
     placeholders = list(dict.fromkeys(_PLACEHOLDER_RE.findall(query_text)))
 
-    _header("Log Insights", names[idx])
+    _header("Log Insights", query_name)
 
     var_args: list[str] = []
     ph_values: dict[str, str] = {}
@@ -395,7 +427,6 @@ def tool_log_insights():
         if kept and kept != columns:
             # Write a temp file with the modified display line;
             # placeholders are still present — log_insights.py will resolve via --var
-            import tempfile
             tmp = tempfile.NamedTemporaryFile(
                 mode="w", suffix=".sql", delete=False, encoding="utf-8"
             )
@@ -460,6 +491,39 @@ def tool_cid_journey():
     _run("cid_journey.py", args)
 
 
+# ── Tool: Agent Activity ──────────────────────────────────────────────────────
+
+NAMED_PERIODS_AA = ["today", "yesterday", "this-week", "last-week", "this-month", "last-month"]
+
+def tool_agent_activity():
+    _header("Agent Activity")
+    iid    = ask("Instance ID")
+    region = ask("Region", required=False)
+
+    args = ["--instance-id", iid]
+    if region:
+        args += ["--region", region]
+
+    use_period = ask_bool("Use a named period?")
+    if use_period:
+        period = ask_choice("Period", NAMED_PERIODS_AA, default="last-month")
+        args += ["--period", period]
+    else:
+        start = ask("Start (YYYY-MM-DD)")
+        end   = ask("End   (YYYY-MM-DD)")
+        args += ["--start", start, "--end", end]
+
+    if ask_bool("Filter to a specific agent?"):
+        login = ask("Agent login")
+        args += ["--agent", login]
+
+    output = ask("Output CSV file", required=False)
+    if output:
+        args += ["--output", output]
+
+    _run("agent_activity.py", args)
+
+
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 
 RUNNERS = [
@@ -470,6 +534,7 @@ RUNNERS = [
     tool_flow_to_chart,
     tool_log_insights,
     tool_cid_journey,
+    tool_agent_activity,
 ]
 
 
