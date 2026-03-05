@@ -118,7 +118,7 @@ def pick_menu(title: str, options: list[str], quit_label: str = "back") -> int |
                 print(f"     {num}.  {name}")
             print()
             print(f"  \033[90m[1-{min(n, 9)}] select  [q] {quit_label}\033[0m\n")
-            val = input("  Choice (press Enter to confirm): ").strip()
+            val = _input("  Choice (press Enter to confirm): ").strip()
             if not val or val.lower().startswith("q"):
                 return None
             if val.isdigit() and 1 <= int(val) <= n:
@@ -159,6 +159,23 @@ def main_menu() -> int | None:
     return pick_menu(TITLE, TOOLS, quit_label="quit")
 
 
+# ── Input helper ──────────────────────────────────────────────────────────────
+# On Windows, input() uses the Windows console API for both writing the prompt
+# and reading the response. In mintty (Git Bash) that API is invisible — mintty
+# communicates via pipes, not the Windows console buffer — so prompts never
+# appear and responses may be lost. Using sys.stdout.write + sys.stdin.readline
+# goes through regular file I/O, which mintty's pipe handles correctly.
+
+def _input(prompt: str = "") -> str:
+    if prompt:
+        sys.stdout.write(prompt)
+        sys.stdout.flush()
+    line = sys.stdin.readline()
+    if not line:          # EOF (Ctrl+D / Ctrl+Z)
+        raise EOFError
+    return line.rstrip("\r\n")
+
+
 # ── Prompt helpers ────────────────────────────────────────────────────────────
 
 def _header(*crumbs: str):
@@ -172,7 +189,7 @@ def _header(*crumbs: str):
 def ask(label: str, required: bool = True, default: str = "") -> str:
     hint = f"[{default}]" if default else ("required" if required else "optional")
     while True:
-        val = input(f"  {label} ({hint}): ").strip()
+        val = _input(f"  {label} ({hint}): ").strip()
         if val == "..":
             raise GoBack
         if not val and default:
@@ -187,7 +204,7 @@ def ask_choice(label: str, choices: list[str], default: str) -> str:
     opts = "  ".join(f"{i + 1}) {c}" for i, c in enumerate(choices))
     print(f"  {label}:  {opts}")
     while True:
-        val = input(f"  Choice [{default}]: ").strip()
+        val = _input(f"  Choice [{default}]: ").strip()
         if val == "..":
             raise GoBack
         if not val:
@@ -201,7 +218,7 @@ def ask_choice(label: str, choices: list[str], default: str) -> str:
 
 def ask_bool(label: str, default: bool = False) -> bool:
     hint = "Y/n" if default else "y/N"
-    val  = input(f"  {label} [{hint}]: ").strip().lower()
+    val  = _input(f"  {label} [{hint}]: ").strip().lower()
     if val == "..":
         raise GoBack
     return default if not val else val in ("y", "yes")
@@ -237,7 +254,7 @@ def _run(script: str, args: list[str]):
     _log(script, args, result.returncode, elapsed)
     print()
     print("  " + "─" * 40)
-    input("  Press Enter to return to menu…")
+    _input("  Press Enter to return to menu…")
 
 
 # ── Tool: Contacts Handled ────────────────────────────────────────────────────
@@ -396,7 +413,7 @@ def _select_columns(columns: list[str]) -> list[str]:
         print(f"    {i:2}.  {col}")
     print()
     while True:
-        val = input("  Exclude # (or blank to finish): ").strip()
+        val = _input("  Exclude # (or blank to finish): ").strip()
         if not val:
             break
         if val.isdigit() and 1 <= int(val) <= len(columns):
@@ -425,7 +442,7 @@ def _read_adhoc_query() -> str | None:
     lines: list[str] = []
     try:
         while True:
-            line = input()
+            line = _input()
             if line.strip().lower() == "cancel":
                 return None
             lines.append(line)
