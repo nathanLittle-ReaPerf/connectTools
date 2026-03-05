@@ -104,7 +104,7 @@ def pick_menu(title: str, options: list[str], quit_label: str = "back") -> int |
         print()
         print(f"  \033[90m[1-{min(n, 9)}] select  [q] {quit_label}\033[0m\n")
         val = input("  Choice: ").strip()
-        if val.lower() in ("q", ""):
+        if not val or val.lower().startswith("q"):
             return None
         if val.isdigit() and 1 <= int(val) <= n:
             return int(val) - 1
