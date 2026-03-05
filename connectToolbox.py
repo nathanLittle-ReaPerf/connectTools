@@ -10,6 +10,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Force UTF-8 output immediately so box-drawing chars work on Windows.
+# line_buffering=True ensures every print() flushes, which is required when
+# stdout is redirected/piped (e.g. mintty) and Python can't detect a tty.
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
+    sys.stderr.reconfigure(encoding="utf-8", line_buffering=True)
+
 SCRIPT_DIR  = Path(__file__).parent
 QUERIES_DIR = SCRIPT_DIR / "queries"
 TITLE       = "Amazon Connect Tools"
@@ -86,6 +93,13 @@ else:
 QUIT = (b"q", b"Q", b"\x03")
 
 
+def clear_screen():
+    if _MINTTY:
+        print("\033[2J\033[H", end="", flush=True)
+    else:
+        clear_screen()
+
+
 # ── Generic arrow-key menu ────────────────────────────────────────────────────
 
 def pick_menu(title: str, options: list[str], quit_label: str = "back") -> int | None:
@@ -95,7 +109,7 @@ def pick_menu(title: str, options: list[str], quit_label: str = "back") -> int |
     if _MINTTY:
         # mintty / Git Bash: raw keypresses don't work — use plain numbered input
         while True:
-            os.system(CLEAR)
+            clear_screen()
             print(f"\n  {title}")
             print("  " + "─" * max(40, len(title) + 2))
             print()
@@ -113,7 +127,7 @@ def pick_menu(title: str, options: list[str], quit_label: str = "back") -> int |
 
     selected = 0
     while True:
-        os.system(CLEAR)
+        clear_screen()
         print(f"\n  {title}")
         print("  " + "─" * max(40, len(title) + 2))
         print()
@@ -148,7 +162,7 @@ def main_menu() -> int | None:
 # ── Prompt helpers ────────────────────────────────────────────────────────────
 
 def _header(*crumbs: str):
-    os.system(CLEAR)
+    clear_screen()
     print(f"\n  {TITLE}  ›  {'  ›  '.join(crumbs)}")
     print("  " + "─" * 40)
     print(f"  \033[90m  type .. at any prompt to go back\033[0m")
@@ -584,15 +598,12 @@ RUNNERS = [
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
-    if sys.platform == "win32":
-        sys.stdout.reconfigure(encoding="utf-8")
-        sys.stderr.reconfigure(encoding="utf-8")
-    os.system(CLEAR)
+    clear_screen()
     try:
         while True:
             choice = main_menu()
             if choice is None:
-                os.system(CLEAR)
+                clear_screen()
                 print("\n  Goodbye.\n")
                 break
             try:
@@ -600,7 +611,7 @@ def main():
             except GoBack:
                 pass  # return to main menu
     except (KeyboardInterrupt, EOFError):
-        os.system(CLEAR)
+        clear_screen()
         print("\n  Goodbye.\n")
 
 
