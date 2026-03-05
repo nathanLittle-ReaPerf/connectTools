@@ -29,6 +29,10 @@ TOOLS = [
 _PLACEHOLDER_RE = re.compile(r"\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}")
 
 
+class GoBack(Exception):
+    """Raised from any prompt when the user types '..' to return to the main menu."""
+
+
 # ── Raw keypress reader (cross-platform) ──────────────────────────────────────
 
 if sys.platform == "win32":
@@ -115,6 +119,7 @@ def _header(*crumbs: str):
     os.system(CLEAR)
     print(f"\n  {TITLE}  ›  {'  ›  '.join(crumbs)}")
     print("  " + "─" * 40)
+    print(f"  \033[90m  type .. at any prompt to go back\033[0m")
     print()
 
 
@@ -122,6 +127,8 @@ def ask(label: str, required: bool = True, default: str = "") -> str:
     hint = f"[{default}]" if default else ("required" if required else "optional")
     while True:
         val = input(f"  {label} ({hint}): ").strip()
+        if val == "..":
+            raise GoBack
         if not val and default:
             return default
         if not val and required:
@@ -135,6 +142,8 @@ def ask_choice(label: str, choices: list[str], default: str) -> str:
     print(f"  {label}:  {opts}")
     while True:
         val = input(f"  Choice [{default}]: ").strip()
+        if val == "..":
+            raise GoBack
         if not val:
             return default
         if val.isdigit() and 1 <= int(val) <= len(choices):
@@ -147,6 +156,8 @@ def ask_choice(label: str, choices: list[str], default: str) -> str:
 def ask_bool(label: str, default: bool = False) -> bool:
     hint = "Y/n" if default else "y/N"
     val  = input(f"  {label} [{hint}]: ").strip().lower()
+    if val == "..":
+        raise GoBack
     return default if not val else val in ("y", "yes")
 
 
@@ -549,7 +560,10 @@ def main():
                 os.system(CLEAR)
                 print("\n  Goodbye.\n")
                 break
-            RUNNERS[choice]()
+            try:
+                RUNNERS[choice]()
+            except GoBack:
+                pass  # return to main menu
     except (KeyboardInterrupt, EOFError):
         os.system(CLEAR)
         print("\n  Goodbye.\n")
