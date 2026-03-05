@@ -8,9 +8,17 @@ No pip install required. Uses only Python standard library.
 
 ## Usage
 
+**AWS CloudShell (recommended):**
 ```bash
-python connectToolbox.py
+./connectToolbox.py
 ```
+
+**Local Windows (Cmder / Git Bash):**
+```bash
+./connectToolbox
+```
+
+The `connectToolbox` wrapper script (no `.py` extension) invokes `winpty` automatically. Running `python connectToolbox.py` directly on Windows in Cmder/Git Bash will display the menu but silently ignore all keyboard input — see [Troubleshooting](#troubleshooting) below.
 
 ## Navigation
 
@@ -63,7 +71,26 @@ Fields: timestamp, tool name, exit code (non-zero runs are flagged `ERROR`), dur
 
 ## Platform Support
 
-Works on both Windows (local) and Linux (AWS CloudShell). Arrow key handling uses `msvcrt` on Windows and `termios` on Linux — no install required on either platform.
+Works on both Linux (AWS CloudShell) and Windows (local). Arrow key handling uses `msvcrt` on Windows and `termios` on Linux — no install required on either platform.
+
+## Troubleshooting
+
+### Input silently ignored on Windows (Cmder / Git Bash)
+
+**Symptoms:**
+- Menu displays correctly, but typing a number and pressing Enter does nothing
+- Characters may echo to the screen but the selection never registers
+- Arrow keys move the terminal cursor around the menu instead of navigating it
+- Running `python3 -c "import sys; print(sys.stdin.isatty())"` prints `False`
+
+**Cause:** In Cmder and Git Bash (mintty), Python's `sys.stdin` is a pipe rather than a real TTY. The menu prompt appears (stdout works fine) but reads from stdin block indefinitely waiting for data that never arrives through the pipe.
+
+**Fix:** Use the `connectToolbox` wrapper script instead of invoking Python directly:
+```bash
+./connectToolbox        # wraps with winpty automatically
+```
+
+`winpty` bridges mintty's PTY to the Windows console API that Python expects. It ships with **Git for Windows** — if you have Git Bash you already have it. Verify with `which winpty`.
 
 ## Notes
 
