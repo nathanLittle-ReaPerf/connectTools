@@ -94,21 +94,22 @@ def pick_menu(title: str, options: list[str], quit_label: str = "back") -> int |
 
     if _MINTTY:
         # mintty / Git Bash: raw keypresses don't work — use plain numbered input
-        os.system(CLEAR)
-        print(f"\n  {title}")
-        print("  " + "─" * max(40, len(title) + 2))
-        print()
-        for i, name in enumerate(options):
-            num = str(i + 1) if i < 9 else " "
-            print(f"     {num}.  {name}")
-        print()
-        print(f"  \033[90m[1-{min(n, 9)}] select  [q] {quit_label}\033[0m\n")
-        val = input("  Choice: ").strip()
-        if not val or val.lower().startswith("q"):
-            return None
-        if val.isdigit() and 1 <= int(val) <= n:
-            return int(val) - 1
-        return None
+        while True:
+            os.system(CLEAR)
+            print(f"\n  {title}")
+            print("  " + "─" * max(40, len(title) + 2))
+            print()
+            for i, name in enumerate(options):
+                num = str(i + 1) if i < 9 else " "
+                print(f"     {num}.  {name}")
+            print()
+            print(f"  \033[90m[1-{min(n, 9)}] select  [q] {quit_label}\033[0m\n")
+            val = input("  Choice: ").strip()
+            if not val or val.lower().startswith("q"):
+                return None
+            if val.isdigit() and 1 <= int(val) <= n:
+                return int(val) - 1
+            print(f"  \033[33m  Enter a number 1–{min(n, 9)}\033[0m")
 
     selected = 0
     while True:
