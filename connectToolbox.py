@@ -95,9 +95,9 @@ QUIT = (b"q", b"Q", b"\x03")
 
 def clear_screen():
     if _MINTTY:
-        print("\033[2J\033[H", end="", flush=True)
+        print("\n" + "─" * 60, flush=True)  # scroll separator — ANSI clear unreliable in mintty
     else:
-        clear_screen()
+        os.system(CLEAR)
 
 
 # ── Generic arrow-key menu ────────────────────────────────────────────────────
