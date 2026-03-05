@@ -34,8 +34,12 @@ class GoBack(Exception):
 
 
 # ── Raw keypress reader (cross-platform) ──────────────────────────────────────
+# mintty (Git Bash on Windows) sets TERM but msvcrt doesn't work there.
+# Detect it and use a simple line-input fallback instead.
 
-if sys.platform == "win32":
+_MINTTY = sys.platform == "win32" and bool(os.environ.get("TERM"))
+
+if sys.platform == "win32" and not _MINTTY:
     import msvcrt
 
     def getch() -> bytes:
@@ -78,8 +82,27 @@ QUIT = (b"q", b"Q", b"\x03")
 
 def pick_menu(title: str, options: list[str], quit_label: str = "back") -> int | None:
     """Arrow-key or number selection. Returns 0-based index or None to go back/quit."""
-    selected = 0
     n = len(options)
+
+    if _MINTTY:
+        # mintty / Git Bash: raw keypresses don't work — use plain numbered input
+        os.system(CLEAR)
+        print(f"\n  {title}")
+        print("  " + "─" * max(40, len(title) + 2))
+        print()
+        for i, name in enumerate(options):
+            num = str(i + 1) if i < 9 else " "
+            print(f"     {num}.  {name}")
+        print()
+        print(f"  \033[90m[1-{min(n, 9)}] select  [q] {quit_label}\033[0m\n")
+        val = input("  Choice: ").strip()
+        if val.lower() in ("q", ""):
+            return None
+        if val.isdigit() and 1 <= int(val) <= n:
+            return int(val) - 1
+        return None
+
+    selected = 0
     while True:
         os.system(CLEAR)
         print(f"\n  {title}")
