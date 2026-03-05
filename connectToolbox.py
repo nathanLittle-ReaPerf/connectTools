@@ -39,7 +39,15 @@ class GoBack(Exception):
 
 _MINTTY = sys.platform == "win32" and bool(os.environ.get("TERM"))
 
-if sys.platform == "win32" and not _MINTTY:
+if _MINTTY:
+    # mintty never calls getch() — pick_menu uses plain input() instead
+    def getch() -> bytes:
+        return b""
+
+    UP    = b""
+    DOWN  = b""
+    CLEAR = "clear"
+elif sys.platform == "win32":
     import msvcrt
 
     def getch() -> bytes:
