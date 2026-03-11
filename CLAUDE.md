@@ -151,6 +151,42 @@ python contacts_handled.py --instance-arn <ARN> --region us-east-1
 - Accepts either `--instance-id` or `--instance-arn` (mutually exclusive)
 - botocore retry config with exponential backoff (max 10 attempts)
 
+---
+
+### `contact_recordings.py` — Contact Recordings & Transcripts
+
+Locate the S3 paths and generate presigned download URLs for a contact's recordings and transcripts — original and redacted — for both voice and chat.
+
+```bash
+# Human-readable
+python contact_recordings.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
+
+# Extend presigned URL expiry to 2 hours
+python contact_recordings.py --instance-id <UUID> --contact-id <UUID> --url-expires 7200
+
+# Raw JSON (pipe to jq)
+python contact_recordings.py --instance-id <UUID> --contact-id <UUID> --json | jq '.artifacts'
+```
+
+**APIs used:** `DescribeContact`, `ListInstanceStorageConfigs`, `s3:ListObjectsV2`, `s3:GeneratePresignedUrl`
+
+**Required IAM:**
+- `connect:DescribeContact`
+- `connect:ListInstanceStorageConfigs`
+- `s3:ListBucket` on the recordings/transcripts bucket(s)
+- `s3:GetObject` on the recordings/transcripts bucket(s)
+
+**What it finds (VOICE):** recording (original + redacted), Contact Lens analysis (original + redacted)
+
+**What it finds (CHAT):** chat transcript (original + redacted), Contact Lens analysis (original + redacted)
+
+**Key behaviors:**
+- Reads `ListInstanceStorageConfigs` for `CALL_RECORDINGS` and `CHAT_TRANSCRIPTS` — adapts to your instance's bucket names and prefixes automatically; no hardcoded bucket names
+- Searches S3 under the contact's date prefix (`YYYY/MM/DD`) and filters by contact ID in the key name
+- Classifies files as original vs. redacted by checking for `_redacted` in the filename or `/Redacted/` in the path
+- Presigned URLs default to 1-hour expiry; override with `--url-expires <seconds>`
+- `--json` output groups all results under `artifacts.recordings`, `artifacts.analysis`, and `artifacts.transcripts`
+
 ## Architecture
 
 All scripts follow the same conventions:

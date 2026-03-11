@@ -26,21 +26,40 @@ The `connectToolbox` wrapper script (no `.py` extension) invokes `winpty` automa
 |---|---|
 | `↑` / `↓` | Move selection |
 | `Enter` | Run selected tool |
-| `1` – `6` | Jump directly to a tool |
-| `q` | Quit |
+| `1` – `9` | Jump directly to an item by number |
+| `q` | Quit / go back |
 
-## Tools
+The menu is two levels: pick a **group**, then pick a **tool** within it. Press `q` in the tool submenu to return to the group list.
 
+## Tool Groups
+
+### Contacts
 | # | Tool | Script |
 |---|---|---|
 | 1 | Contacts Handled | `contacts_handled.py` |
 | 2 | Contact Inspect | `contact_inspect.py` |
 | 3 | Contact Search | `contact_search.py` |
-| 4 | Export Flow | `export_flow.py` |
-| 5 | Flow to Chart | `flow_to_chart.py` |
-| 6 | Log Insights | `log_insights.py` |
+| 4 | Contact Recordings | `contact_recordings.py` |
 
-After selecting a tool, the menu prompts for each argument one at a time. Optional fields can be left blank to use defaults. When the tool finishes, press Enter to return to the menu.
+### Flows
+| # | Tool | Script |
+|---|---|---|
+| 1 | Export Flow | `export_flow.py` |
+| 2 | Flow to Chart | `flow_to_chart.py` |
+
+### Log Insights
+| # | Tool | Script |
+|---|---|---|
+| 1 | Log Insights | `log_insights.py` |
+| 2 | CID Journey | `cid_journey.py` |
+
+### Agents
+| # | Tool | Script |
+|---|---|---|
+| 1 | Agent Activity | `agent_activity.py` |
+| 2 | Agent List | `agent_list.py` |
+
+After selecting a tool, the menu prompts for each argument one at a time. Optional fields can be left blank to use defaults. When the tool finishes, press Enter to return to the tool submenu.
 
 ## Per-tool prompts
 
@@ -50,11 +69,17 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 
 **Contact Search** — Instance ID, Start date, End date, Region, optional filters (channel, initiation method, queue ID, contact attribute), max contacts, output file
 
+**Contact Recordings** — Instance ID, Contact ID, Region, URL expiry (seconds, default 3600)
+
 **Export Flow** — Instance ID, Region, optionally list flows first, Flow name, Exact match (y/n), Output file
 
 **Flow to Chart** — Flow JSON file path, Format (html / mermaid / dot), Output file
 
 **Log Insights** — Pick a saved query from the `queries/` folder, fill in any placeholders, optionally customize columns, choose a time range (relative or date range), Region, Log group, Max rows, Output file
+
+**Agent Activity** — Instance ID, Region, Named period or date range, optional agent login filter, Output CSV
+
+**Agent List** — Instance ID, Region, optional username search (substring), optional routing profile filter, Output CSV
 
 ## Logging
 
