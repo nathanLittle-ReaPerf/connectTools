@@ -22,16 +22,6 @@ QUERIES_DIR = SCRIPT_DIR / "queries"
 TITLE       = "Amazon Connect Tools"
 LOG_FILE    = Path.home() / "logs" / "connecttools.log"
 
-TOOLS = [
-    "Contacts Handled",
-    "Contact Inspect",
-    "Contact Search",
-    "Export Flow",
-    "Flow to Chart",
-    "Log Insights",
-    "CID Journey",
-    "Agent Activity",
-]
 
 _PLACEHOLDER_RE = re.compile(r"\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}")
 
@@ -155,8 +145,6 @@ def pick_menu(title: str, options: list[str], quit_label: str = "back") -> int |
                 return i
 
 
-def main_menu() -> int | None:
-    return pick_menu(TITLE, TOOLS, quit_label="quit")
 
 
 # ── Input helper ──────────────────────────────────────────────────────────────
@@ -340,6 +328,22 @@ def tool_contact_search():
 
 
 VALID_CHANNELS_CS = ["VOICE", "CHAT", "TASK", "EMAIL"]
+
+
+# ── Tool: Contact Recordings ─────────────────────────────────────────────────
+
+def tool_contact_recordings():
+    _header("Contact Recordings")
+    iid     = ask("Instance ID")
+    cid     = ask("Contact ID")
+    region  = ask("Region",           required=False)
+    expires = ask("URL expiry (secs)", required=False, default="3600")
+
+    args = ["--instance-id", iid, "--contact-id", cid]
+    if region:            args += ["--region",      region]
+    if expires != "3600": args += ["--url-expires", expires]
+
+    _run("contact_recordings.py", args)
 
 
 # ── Tool: Export Flow ─────────────────────────────────────────────────────────
@@ -598,17 +602,48 @@ def tool_agent_activity():
     _run("agent_activity.py", args)
 
 
+# ── Tool: Agent List ──────────────────────────────────────────────────────────
+
+def tool_agent_list():
+    _header("Agents", "Agent List")
+    iid    = ask("Instance ID")
+    region = ask("Region", required=False)
+    search = ask("Search username (leave blank for all)", required=False)
+    rp     = ask("Filter by routing profile name", required=False)
+
+    args = ["--instance-id", iid]
+    if region: args += ["--region", region]
+    if search: args += ["--search", search]
+    if rp:     args += ["--routing-profile", rp]
+
+    output = ask("Output CSV file (leave blank to print table)", required=False)
+    if output:
+        args += ["--csv", output]
+
+    _run("agent_list.py", args)
+
+
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 
-RUNNERS = [
-    tool_contacts_handled,
-    tool_contact_inspect,
-    tool_contact_search,
-    tool_export_flow,
-    tool_flow_to_chart,
-    tool_log_insights,
-    tool_cid_journey,
-    tool_agent_activity,
+GROUPS = [
+    ("Contacts", [
+        ("Contacts Handled",    tool_contacts_handled),
+        ("Contact Inspect",     tool_contact_inspect),
+        ("Contact Search",      tool_contact_search),
+        ("Contact Recordings",  tool_contact_recordings),
+    ]),
+    ("Flows", [
+        ("Export Flow",      tool_export_flow),
+        ("Flow to Chart",    tool_flow_to_chart),
+    ]),
+    ("Log Insights", [
+        ("Log Insights",     tool_log_insights),
+        ("CID Journey",      tool_cid_journey),
+    ]),
+    ("Agents", [
+        ("Agent Activity",   tool_agent_activity),
+        ("Agent List",       tool_agent_list),
+    ]),
 ]
 
 
@@ -616,17 +651,24 @@ RUNNERS = [
 
 def main():
     clear_screen()
+    group_names = [g[0] for g in GROUPS]
     try:
         while True:
-            choice = main_menu()
-            if choice is None:
+            group_idx = pick_menu(TITLE, group_names, quit_label="quit")
+            if group_idx is None:
                 clear_screen()
                 print("\n  Goodbye.\n")
                 break
-            try:
-                RUNNERS[choice]()
-            except GoBack:
-                pass  # return to main menu
+            group_name, tools = GROUPS[group_idx]
+            tool_names = [t[0] for t in tools]
+            while True:
+                tool_idx = pick_menu(f"{TITLE}  ›  {group_name}", tool_names, quit_label="back")
+                if tool_idx is None:
+                    break
+                try:
+                    tools[tool_idx][1]()
+                except GoBack:
+                    pass  # return to group submenu
     except (KeyboardInterrupt, EOFError):
         clear_screen()
         print("\n  Goodbye.\n")

@@ -41,13 +41,32 @@ The toolbox is an interactive menu launcher — select a tool with arrow keys or
 pip install python-dateutil openpyxl --user
 ```
 
-### Local Development
+### Local Development (Windows — Cmder / Git Bash)
 
 ```bash
 pip install boto3 python-dateutil openpyxl
 ```
 
 Pass `--profile <name>` to any script to use a named AWS profile instead of the session credentials.
+
+#### winpty requirement
+
+The interactive toolbox (`connectToolbox`) requires **winpty** when run locally on Windows in Cmder or Git Bash. Without it, the menu displays but keyboard input is silently ignored — the prompt appears, you type, nothing happens.
+
+**Why:** Python's `sys.stdin` in these terminals is a pipe, not a real TTY. `winpty` bridges the gap between the mintty PTY and the Windows console API that Python expects.
+
+**Symptom — input is silently ignored:**
+```
+  Choice (press Enter to confirm):
+```
+The prompt appears and characters may echo, but pressing Enter does nothing. You may also see `sys.stdin.isatty()` return `False`.
+
+**Fix:** Use the included wrapper script instead of calling Python directly:
+```bash
+./connectToolbox        # uses winpty automatically
+```
+
+`winpty` ships with **Git for Windows** — if you have Git Bash, you already have it. You can verify with `which winpty`.
 
 ---
 
@@ -222,7 +241,7 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 
 Every run is logged to `~/logs/connecttools.log` with timestamp, exit code, duration, and the full argument list.
 
-Works on both Linux (AWS CloudShell) and Windows (local).
+Works on both Linux (AWS CloudShell) and Windows (local — see [winpty requirement](#winpty-requirement) above).
 
 ---
 

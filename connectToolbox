@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Local Windows (Cmder/Git Bash) wrapper — winpty bridges the PTY gap.
+# On CloudShell/Linux, use connectToolbox.py directly (it's chmod +x).
+winpty python3 "$(dirname "$0")/connectToolbox.py" "$@"
