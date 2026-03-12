@@ -227,12 +227,12 @@ def ask_choice(label: str, choices: list[str], default: str) -> str:
 
 import re as _re
 
-# Accepted patterns and their canonical forms
+# Accepted patterns: (regex, strptime_format)
 _DATE_FORMATS = {
-    "YYYY-MM":             _re.compile(r"^\d{4}-\d{2}$"),
-    "YYYY-MM-DD":          _re.compile(r"^\d{4}-\d{2}-\d{2}$"),
-    "YYYY-MM-DDTHH:MM:SS": _re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$"),
-    "YYYY-MM-DD HH:MM":    _re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$"),
+    "YYYY-MM":             (_re.compile(r"^\d{4}-\d{2}$"),                    "%Y-%m"),
+    "YYYY-MM-DD":          (_re.compile(r"^\d{4}-\d{2}-\d{2}$"),              "%Y-%m-%d"),
+    "YYYY-MM-DDTHH:MM:SS": (_re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$"), "%Y-%m-%dT%H:%M:%S"),
+    "YYYY-MM-DD HH:MM":    (_re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$"), "%Y-%m-%d %H:%M"),
 }
 
 
@@ -264,13 +264,23 @@ def _normalize_date(s: str) -> str:
     return s
 
 
+def _parse_date(s: str, strptime_fmt: str) -> bool:
+    """Return True if s parses cleanly as strptime_fmt."""
+    try:
+        dt.datetime.strptime(s, strptime_fmt)
+        return True
+    except ValueError:
+        return False
+
+
 def ask_date(label: str, formats: list, required: bool = True, default: str = "") -> str:
     """Prompt for a date/time string, auto-normalize, validate, and re-prompt on bad input.
 
     formats: list of keys from _DATE_FORMATS, e.g. ["YYYY-MM-DD", "YYYY-MM-DDTHH:MM:SS"]
+    Checks both shape (regex) and value validity (strptime) so e.g. month 13 is rejected.
     """
     hint_str = " or ".join(formats)
-    patterns = [_DATE_FORMATS[f] for f in formats]
+    fmt_specs = [_DATE_FORMATS[f] for f in formats]
     full_label = f"{label} ({hint_str})"
     while True:
         raw = ask(full_label, required=required, default=default)
@@ -279,9 +289,16 @@ def ask_date(label: str, formats: list, required: bool = True, default: str = ""
         normalized = _normalize_date(raw)
         if normalized != raw:
             print(f"  \033[90m  → {normalized}\033[0m")
-        if any(p.match(normalized) for p in patterns):
+        matched = next(
+            (strptime_fmt for pattern, strptime_fmt in fmt_specs if pattern.match(normalized)),
+            None,
+        )
+        if matched and _parse_date(normalized, matched):
             return normalized
-        print(f"  \033[33m  Expected: {hint_str}\033[0m")
+        if matched:
+            print(f"  \033[33m  Invalid date value — check month/day are in range\033[0m")
+        else:
+            print(f"  \033[33m  Expected: {hint_str}\033[0m")
 
 
 def ask_bool(label: str, default: bool = False) -> bool:
