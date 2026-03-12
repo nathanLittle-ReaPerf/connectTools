@@ -223,6 +223,67 @@ def ask_choice(label: str, choices: list[str], default: str) -> str:
         print(f"  \033[33m  Enter a number 1–{len(choices)}\033[0m")
 
 
+# ── Date / time input helpers ─────────────────────────────────────────────────
+
+import re as _re
+
+# Accepted patterns and their canonical forms
+_DATE_FORMATS = {
+    "YYYY-MM":             _re.compile(r"^\d{4}-\d{2}$"),
+    "YYYY-MM-DD":          _re.compile(r"^\d{4}-\d{2}-\d{2}$"),
+    "YYYY-MM-DDTHH:MM:SS": _re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$"),
+    "YYYY-MM-DD HH:MM":    _re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$"),
+}
+
+
+def _normalize_date(s: str) -> str:
+    """Insert missing dashes and colons for common compact date/time strings."""
+    s = s.strip()
+    # 6 digits → YYYY-MM
+    if _re.fullmatch(r"\d{6}", s):
+        return f"{s[:4]}-{s[4:]}"
+    # 8 digits → YYYY-MM-DD
+    if _re.fullmatch(r"\d{8}", s):
+        return f"{s[:4]}-{s[4:6]}-{s[6:]}"
+    # 8 digits + T/space + 4 digits → YYYY-MM-DD[T ]HH:MM
+    if _re.fullmatch(r"\d{8}[T ]\d{4}", s):
+        sep = s[8]
+        return f"{s[:4]}-{s[4:6]}-{s[6:8]}{sep}{s[9:11]}:{s[11:]}"
+    # 8 digits + T/space + 6 digits → YYYY-MM-DD[T ]HH:MM:SS
+    if _re.fullmatch(r"\d{8}[T ]\d{6}", s):
+        sep = s[8]
+        return f"{s[:4]}-{s[4:6]}-{s[6:8]}{sep}{s[9:11]}:{s[11:13]}:{s[13:]}"
+    # YYYY-MM-DD + T/space + 4 digits (missing colons) → YYYY-MM-DD[T ]HH:MM
+    if _re.fullmatch(r"\d{4}-\d{2}-\d{2}[T ]\d{4}", s):
+        sep = s[10]
+        return f"{s[:10]}{sep}{s[11:13]}:{s[13:]}"
+    # YYYY-MM-DD + T/space + 6 digits (missing colons) → YYYY-MM-DD[T ]HH:MM:SS
+    if _re.fullmatch(r"\d{4}-\d{2}-\d{2}[T ]\d{6}", s):
+        sep = s[10]
+        return f"{s[:10]}{sep}{s[11:13]}:{s[13:15]}:{s[15:]}"
+    return s
+
+
+def ask_date(label: str, formats: list, required: bool = True, default: str = "") -> str:
+    """Prompt for a date/time string, auto-normalize, validate, and re-prompt on bad input.
+
+    formats: list of keys from _DATE_FORMATS, e.g. ["YYYY-MM-DD", "YYYY-MM-DDTHH:MM:SS"]
+    """
+    hint_str = " or ".join(formats)
+    patterns = [_DATE_FORMATS[f] for f in formats]
+    full_label = f"{label} ({hint_str})"
+    while True:
+        raw = ask(full_label, required=required, default=default)
+        if not raw:
+            return raw  # optional and left blank
+        normalized = _normalize_date(raw)
+        if normalized != raw:
+            print(f"  \033[90m  → {normalized}\033[0m")
+        if any(p.match(normalized) for p in patterns):
+            return normalized
+        print(f"  \033[33m  Expected: {hint_str}\033[0m")
+
+
 def ask_bool(label: str, default: bool = False) -> bool:
     hint = "Y/n" if default else "y/N"
     val  = _input(f"  {label} [{hint}]: ").strip().lower()
@@ -308,7 +369,7 @@ def _run(script: str, args: list[str]):
 def tool_contacts_handled():
     _header("Contacts Handled")
     iid, region, profile = ask_connect_defaults()
-    month = ask("Month (YYYY-MM)", required=False)
+    month = ask_date("Month", ["YYYY-MM"], required=False)
     tz    = ask("Timezone",        required=False)
 
     args = connect_args(iid, region, profile)
@@ -337,8 +398,8 @@ def tool_contact_inspect():
 def tool_contact_search():
     _header("Contact Search")
     iid, region, profile = ask_connect_defaults()
-    start = ask("Start (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)")
-    end   = ask("End   (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)")
+    start = ask_date("Start", ["YYYY-MM-DD", "YYYY-MM-DDTHH:MM:SS"])
+    end   = ask_date("End",   ["YYYY-MM-DD", "YYYY-MM-DDTHH:MM:SS"])
 
     args = connect_args(iid, region, profile) + ["--start", start, "--end", end]
 
@@ -586,8 +647,8 @@ def tool_log_insights():
     time_choice = ask_choice("Time range", ["Relative (e.g. 24h, 7d)", "Date range"], default="Relative (e.g. 24h, 7d)")
     time_args: list[str] = []
     if "Date" in time_choice:
-        start = ask("Start (YYYY-MM-DD or 'YYYY-MM-DD HH:MM')")
-        end   = ask("End", required=False)
+        start = ask_date("Start", ["YYYY-MM-DD", "YYYY-MM-DD HH:MM"])
+        end   = ask_date("End",   ["YYYY-MM-DD", "YYYY-MM-DD HH:MM"], required=False)
         time_args = ["--start", start]
         if end:
             time_args += ["--end", end]
@@ -653,8 +714,8 @@ def tool_agent_activity():
         period = ask_choice("Period", NAMED_PERIODS_AA, default="last-month")
         args += ["--period", period]
     else:
-        start = ask("Start (YYYY-MM-DD)")
-        end   = ask("End   (YYYY-MM-DD)")
+        start = ask_date("Start", ["YYYY-MM-DD"])
+        end   = ask_date("End",   ["YYYY-MM-DD"])
         args += ["--start", start, "--end", end]
 
     if ask_bool("Filter to a specific agent?"):
