@@ -366,6 +366,22 @@ def tool_contact_search():
 VALID_CHANNELS_CS = ["VOICE", "CHAT", "TASK", "EMAIL"]
 
 
+# ── Tool: Contact Logs ────────────────────────────────────────────────────────
+
+def tool_contact_logs():
+    _header("Contact Logs")
+    iid, region, profile = ask_connect_defaults()
+    cid    = ask("Contact ID")
+    fmt    = ask_choice("Output format", ["json", "text"], default="json")
+    output = ask("Output file", required=False)
+
+    args = connect_args(iid, region, profile) + ["--contact-id", cid]
+    if fmt == "text": args += ["--text"]
+    if output:        args += ["--output", output]
+
+    _run("contact_logs.py", args)
+
+
 # ── Tool: Contact Recordings ─────────────────────────────────────────────────
 
 def tool_contact_recordings():
@@ -690,6 +706,7 @@ GROUPS = [
         ("Contact Inspect",     tool_contact_inspect),
         ("Contact Search",      tool_contact_search),
         ("Contact Recordings",  tool_contact_recordings),
+        ("Contact Logs",        tool_contact_logs),
     ]),
     ("Flows", [
         ("Export Flow",      tool_export_flow),
