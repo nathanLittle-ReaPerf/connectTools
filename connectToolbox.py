@@ -709,9 +709,100 @@ GROUPS = [
 ]
 
 
+# ── Dependency check ──────────────────────────────────────────────────────────
+
+def _check_dependencies():
+    """Check runtime dependencies and AWS credentials before launching the menu.
+
+    - Auto-installs python-dateutil if missing.
+    - Prints actionable instructions for anything it can't fix.
+    - Hard-exits on missing critical deps; credential issues are warnings only.
+    """
+    errors: list[tuple[str, str]] = []    # (problem, fix instruction)
+    warnings: list[str] = []
+
+    # Python version
+    if sys.version_info < (3, 8):
+        errors.append((
+            f"Python 3.8+ required (found {sys.version.split()[0]})",
+            "Upgrade Python or use AWS CloudShell.",
+        ))
+
+    # boto3 / botocore — pre-installed in CloudShell; may be absent locally
+    try:
+        import boto3      # noqa: F401
+        import botocore   # noqa: F401
+    except ImportError:
+        errors.append((
+            "boto3 / botocore not installed",
+            "pip install boto3 --user",
+        ))
+
+    # python-dateutil — auto-install if missing
+    try:
+        import dateutil   # noqa: F401
+    except ImportError:
+        print("  python-dateutil not found — installing...", flush=True)
+        rc = subprocess.call(
+            [sys.executable, "-m", "pip", "install", "--user", "python-dateutil"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if rc == 0:
+            # Ensure the newly installed package is importable this session
+            import site
+            if hasattr(site, "getusersitepackages"):
+                user_site = site.getusersitepackages()
+                if user_site not in sys.path:
+                    sys.path.append(user_site)
+            print("  python-dateutil installed successfully.", flush=True)
+        else:
+            errors.append((
+                "python-dateutil could not be installed automatically",
+                "pip install python-dateutil --user",
+            ))
+
+    # ct_config.py — must live alongside connectToolbox.py
+    if not (SCRIPT_DIR / "ct_config.py").exists():
+        errors.append((
+            "ct_config.py not found in script directory",
+            f"Ensure all scripts are in the same folder: {SCRIPT_DIR}",
+        ))
+
+    # AWS credentials — warning only; user may supply --profile per tool
+    try:
+        import boto3
+        creds = boto3.Session().get_credentials()
+        if creds is None:
+            warnings.append(
+                "No AWS credentials detected — tools will fail unless you pass --profile. "
+                "Run 'aws configure' or open AWS CloudShell."
+            )
+    except Exception:
+        pass
+
+    if not errors and not warnings:
+        return  # all good — silent
+
+    print()
+    for problem, fix in errors:
+        print(f"  \033[31m✗  {problem}\033[0m")
+        print(f"     → {fix}")
+    for msg in warnings:
+        print(f"  \033[33m⚠  {msg}\033[0m")
+    print()
+
+    if errors:
+        sys.exit(1)
+
+    # Warnings only — pause so the user sees them before the menu appears
+    input("  Press Enter to continue anyway…")
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
+    _check_dependencies()
     clear_screen()
     group_names = [g[0] for g in GROUPS]
     try:
