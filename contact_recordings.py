@@ -181,25 +181,36 @@ def find_artifacts(connect, s3, instance_id, contact, expires):
                 contact_id, expires,
             )
 
-            # Contact Lens analysis — non-redacted and redacted are in separate subdirs
+            # Contact Lens analysis — non-redacted and redacted are in separate subdirs.
+            # Some instances store analysis at the bucket root (no base prefix) even when
+            # recordings use a prefix — search both to cover either layout.
+            analysis_prefixes = [
+                f"{base}/Analysis/Voice/{yyyy}/{mm}/{dd}/",
+                f"{base}/Analysis/Voice/Redacted/{yyyy}/{mm}/{dd}/",
+            ]
+            if base:
+                analysis_prefixes += [
+                    f"Analysis/Voice/{yyyy}/{mm}/{dd}/",
+                    f"Analysis/Voice/Redacted/{yyyy}/{mm}/{dd}/",
+                ]
             result["analysis"] += search_prefixes(
-                s3, bucket,
-                [
-                    f"{base}/Analysis/Voice/{yyyy}/{mm}/{dd}/",
-                    f"{base}/Analysis/Voice/Redacted/{yyyy}/{mm}/{dd}/",
-                ],
-                contact_id, expires,
+                s3, bucket, analysis_prefixes, contact_id, expires,
             )
 
         elif channel == "CHAT":
-            # Contact Lens for chat is stored in the CALL_RECORDINGS bucket
+            # Contact Lens for chat is stored in the CALL_RECORDINGS bucket.
+            # Same dual-prefix search as voice.
+            chat_analysis_prefixes = [
+                f"{base}/Analysis/Chat/{yyyy}/{mm}/{dd}/",
+                f"{base}/Analysis/Chat/Redacted/{yyyy}/{mm}/{dd}/",
+            ]
+            if base:
+                chat_analysis_prefixes += [
+                    f"Analysis/Chat/{yyyy}/{mm}/{dd}/",
+                    f"Analysis/Chat/Redacted/{yyyy}/{mm}/{dd}/",
+                ]
             result["analysis"] += search_prefixes(
-                s3, bucket,
-                [
-                    f"{base}/Analysis/Chat/{yyyy}/{mm}/{dd}/",
-                    f"{base}/Analysis/Chat/Redacted/{yyyy}/{mm}/{dd}/",
-                ],
-                contact_id, expires,
+                s3, bucket, chat_analysis_prefixes, contact_id, expires,
             )
 
     # ── CHAT_TRANSCRIPTS bucket ───────────────────────────────────────────────
