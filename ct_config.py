@@ -17,6 +17,17 @@ FIELDS = [
 ]
 
 
+def get_log_group(instance_id: str) -> str:
+    """Return the saved log group for this instance, or empty string."""
+    return load().get("log_groups", {}).get(instance_id, "")
+
+
+def set_log_group(data: dict, instance_id: str, log_group: str) -> None:
+    """Write log_group into data dict under log_groups[instance_id] and save."""
+    data.setdefault("log_groups", {})[instance_id] = log_group
+    save(data)
+
+
 def load() -> dict:
     if CONFIG_FILE.exists():
         try:
