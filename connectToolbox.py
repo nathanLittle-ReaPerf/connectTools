@@ -10,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import ct_config
+
 # Force UTF-8 output immediately so box-drawing chars work on Windows.
 # line_buffering=True ensures every print() flushes, which is required when
 # stdout is redirected/piped (e.g. mintty) and Python can't detect a tty.
@@ -21,6 +23,8 @@ SCRIPT_DIR  = Path(__file__).parent
 QUERIES_DIR = SCRIPT_DIR / "queries"
 TITLE       = "Amazon Connect Tools"
 LOG_FILE    = Path.home() / "logs" / "connecttools.log"
+
+_cfg = ct_config.load()
 
 
 _PLACEHOLDER_RE = re.compile(r"\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}")
@@ -212,6 +216,45 @@ def ask_bool(label: str, default: bool = False) -> bool:
     return default if not val else val in ("y", "yes")
 
 
+# ── Config helpers ────────────────────────────────────────────────────────────
+
+def _offer_save(iid: str, region: str, profile: str) -> None:
+    """Offer to save instance_id/region/profile as defaults if they differ from config."""
+    new = {"instance_id": iid, "region": region, "profile": profile}
+    current = {k: _cfg.get(k, "") for k in new}
+    if new == current:
+        return  # nothing changed
+    if any(current.values()):
+        if not ask_bool("Overwrite saved defaults?", default=False):
+            return
+    else:
+        if not ask_bool("Save as defaults?", default=True):
+            return
+    _cfg.update(new)
+    ct_config.save(_cfg)
+    print(f"  \033[90mSaved to {ct_config.CONFIG_FILE}\033[0m")
+
+
+def ask_connect_defaults() -> tuple:
+    """Prompt for instance ID, region, and profile with config-backed defaults.
+
+    Returns (iid, region, profile). Offers to save if values differ from config.
+    """
+    iid     = ask("Instance ID", default=_cfg.get("instance_id", ""))
+    region  = ask("Region",      required=False, default=_cfg.get("region", ""))
+    profile = ask("Profile",     required=False, default=_cfg.get("profile", ""))
+    _offer_save(iid, region, profile)
+    return iid, region, profile
+
+
+def connect_args(iid: str, region: str, profile: str) -> list:
+    """Build the common --instance-id / --region / --profile arg list."""
+    args = ["--instance-id", iid]
+    if region:  args += ["--region",  region]
+    if profile: args += ["--profile", profile]
+    return args
+
+
 # ── Tool runner + logging ─────────────────────────────────────────────────────
 
 def _log(script: str, args: list[str], returncode: int, elapsed: float):
@@ -249,15 +292,13 @@ def _run(script: str, args: list[str]):
 
 def tool_contacts_handled():
     _header("Contacts Handled")
-    iid    = ask("Instance ID")
-    month  = ask("Month (YYYY-MM)", required=False)
-    region = ask("Region",          required=False)
-    tz     = ask("Timezone",        required=False)
+    iid, region, profile = ask_connect_defaults()
+    month = ask("Month (YYYY-MM)", required=False)
+    tz    = ask("Timezone",        required=False)
 
-    args = ["--instance-id", iid]
-    if month:  args += ["--month",    month]
-    if region: args += ["--region",   region]
-    if tz:     args += ["--timezone", tz]
+    args = connect_args(iid, region, profile)
+    if month: args += ["--month",    month]
+    if tz:    args += ["--timezone", tz]
 
     _run("contacts_handled.py", args)
 
@@ -266,14 +307,12 @@ def tool_contacts_handled():
 
 def tool_contact_inspect():
     _header("Contact Inspect")
-    iid    = ask("Instance ID")
-    cid    = ask("Contact ID")
-    region = ask("Region", required=False)
-    trans  = ask_bool("Include full transcript?")
+    iid, region, profile = ask_connect_defaults()
+    cid   = ask("Contact ID")
+    trans = ask_bool("Include full transcript?")
 
-    args = ["--instance-id", iid, "--contact-id", cid]
-    if region: args += ["--region", region]
-    if trans:  args += ["--transcript"]
+    args = connect_args(iid, region, profile) + ["--contact-id", cid]
+    if trans: args += ["--transcript"]
 
     _run("contact_inspect.py", args)
 
@@ -282,14 +321,11 @@ def tool_contact_inspect():
 
 def tool_contact_search():
     _header("Contact Search")
-    iid    = ask("Instance ID")
-    start  = ask("Start (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)")
-    end    = ask("End   (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)")
-    region = ask("Region", required=False)
+    iid, region, profile = ask_connect_defaults()
+    start = ask("Start (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)")
+    end   = ask("End   (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)")
 
-    args = ["--instance-id", iid, "--start", start, "--end", end]
-    if region:
-        args += ["--region", region]
+    args = connect_args(iid, region, profile) + ["--start", start, "--end", end]
 
     if ask_bool("Filter by channel?"):
         ch = ask_choice("Channel", VALID_CHANNELS_CS, default="VOICE")
@@ -334,13 +370,11 @@ VALID_CHANNELS_CS = ["VOICE", "CHAT", "TASK", "EMAIL"]
 
 def tool_contact_recordings():
     _header("Contact Recordings")
-    iid     = ask("Instance ID")
+    iid, region, profile = ask_connect_defaults()
     cid     = ask("Contact ID")
-    region  = ask("Region",           required=False)
     expires = ask("URL expiry (secs)", required=False, default="3600")
 
-    args = ["--instance-id", iid, "--contact-id", cid]
-    if region:            args += ["--region",      region]
+    args = connect_args(iid, region, profile) + ["--contact-id", cid]
     if expires != "3600": args += ["--url-expires", expires]
 
     _run("contact_recordings.py", args)
@@ -350,23 +384,21 @@ def tool_contact_recordings():
 
 def tool_export_flow():
     _header("Export Flow")
-    iid    = ask("Instance ID")
-    region = ask("Region", required=False)
+    iid, region, profile = ask_connect_defaults()
 
     if ask_bool("List available flows first?"):
-        list_args = ["--instance-id", iid, "--list"]
-        if region:
-            list_args += ["--region", region]
         print()
-        subprocess.run([sys.executable, str(SCRIPT_DIR / "export_flow.py")] + list_args)
+        subprocess.run(
+            [sys.executable, str(SCRIPT_DIR / "export_flow.py")]
+            + connect_args(iid, region, profile) + ["--list"]
+        )
         print()
 
     name   = ask("Flow name")
     exact  = ask_bool("Exact name match?")
     output = ask("Output file", required=False)
 
-    args = ["--instance-id", iid, "--name", name]
-    if region: args += ["--region", region]
+    args = connect_args(iid, region, profile) + ["--name", name]
     if exact:  args += ["--exact"]
     if output: args += ["--output", output]
 
@@ -527,7 +559,7 @@ def tool_log_insights():
         time_args = ["--last", last]
 
     # ── Other options ─────────────────────────────────────────────────────────
-    region    = ask("Region",     required=False)
+    region    = ask("Region",     required=False, default=_cfg.get("region", ""))
     log_group = ask("Log group",  required=False)
     limit     = ask("Max rows",   required=False, default="1000")
 
@@ -575,12 +607,9 @@ NAMED_PERIODS_AA = ["today", "yesterday", "this-week", "last-week", "this-month"
 
 def tool_agent_activity():
     _header("Agent Activity")
-    iid    = ask("Instance ID")
-    region = ask("Region", required=False)
+    iid, region, profile = ask_connect_defaults()
 
-    args = ["--instance-id", iid]
-    if region:
-        args += ["--region", region]
+    args = connect_args(iid, region, profile)
 
     use_period = ask_bool("Use a named period?")
     if use_period:
@@ -606,13 +635,11 @@ def tool_agent_activity():
 
 def tool_agent_list():
     _header("Agents", "Agent List")
-    iid    = ask("Instance ID")
-    region = ask("Region", required=False)
+    iid, region, profile = ask_connect_defaults()
     search = ask("Search username (leave blank for all)", required=False)
     rp     = ask("Filter by routing profile name", required=False)
 
-    args = ["--instance-id", iid]
-    if region: args += ["--region", region]
+    args = connect_args(iid, region, profile)
     if search: args += ["--search", search]
     if rp:     args += ["--routing-profile", rp]
 
@@ -621,6 +648,38 @@ def tool_agent_list():
         args += ["--csv", output]
 
     _run("agent_list.py", args)
+
+
+# ── Tool: Settings ────────────────────────────────────────────────────────────
+
+def tool_settings():
+    _header("Settings")
+    cfg = ct_config.load()
+
+    print("  Current defaults:\n")
+    any_set = False
+    for key, label in ct_config.FIELDS:
+        val = cfg.get(key) or "(not set)"
+        if cfg.get(key):
+            any_set = True
+        print(f"    {label:<16}  {val}")
+    print()
+
+    if not ask_bool("Edit these settings?", default=True):
+        return
+
+    new_cfg = {}
+    for key, label in ct_config.FIELDS:
+        new_cfg[key] = ask(label, required=False, default=cfg.get(key, ""))
+
+    if any_set:
+        if not ask_bool("Overwrite existing config?", default=False):
+            print("  Cancelled.")
+            return
+
+    ct_config.save(new_cfg)
+    _cfg.update(new_cfg)
+    print(f"  \033[90mSaved to {ct_config.CONFIG_FILE}\033[0m")
 
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
@@ -643,6 +702,9 @@ GROUPS = [
     ("Agents", [
         ("Agent Activity",   tool_agent_activity),
         ("Agent List",       tool_agent_list),
+    ]),
+    ("Settings", [
+        ("Settings",         tool_settings),
     ]),
 ]
 
