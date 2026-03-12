@@ -27,7 +27,7 @@ LOG_FILE    = Path.home() / "logs" / "connecttools.log"
 _cfg = ct_config.load()
 
 
-_PLACEHOLDER_RE = re.compile(r"\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}")
+_PLACEHOLDER_RE = re.compile(r"{\s*([A-Za-z_][A-Za-z0-9_]*)\s*}")
 
 
 class GoBack(Exception):
@@ -164,8 +164,6 @@ def pick_menu(
                 return i
 
 
-
-
 # ── Input helper ──────────────────────────────────────────────────────────────
 # On Windows, input() uses the Windows console API for both writing the prompt
 # and reading the response. In mintty (Git Bash) that API is invisible — mintty
@@ -205,7 +203,6 @@ def ask(label: str, required: bool = True, default: str = "") -> str:
             print("  \033[33m  ↑ this field is required\033[0m")
             continue
         return val
-
 
 def ask_choice(label: str, choices: list[str], default: str) -> str:
     opts = "  ".join(f"{i + 1}) {c}" for i, c in enumerate(choices))
@@ -272,7 +269,6 @@ def _parse_date(s: str, strptime_fmt: str) -> bool:
     except ValueError:
         return False
 
-
 def ask_date(label: str, formats: list, required: bool = True, default: str = "") -> str:
     """Prompt for a date/time string, auto-normalize, validate, and re-prompt on bad input.
 
@@ -300,7 +296,6 @@ def ask_date(label: str, formats: list, required: bool = True, default: str = ""
         else:
             print(f"  \033[33m  Expected: {hint_str}\033[0m")
 
-
 def ask_bool(label: str, default: bool = False) -> bool:
     hint = "Y/n" if default else "y/N"
     val  = _input(f"  {label} [{hint}]: ").strip().lower()
@@ -327,7 +322,6 @@ def _offer_save(iid: str, region: str, profile: str) -> None:
     ct_config.save(_cfg)
     print(f"  \033[90mSaved to {ct_config.CONFIG_FILE}\033[0m")
 
-
 def ask_connect_defaults() -> tuple:
     """Prompt for instance ID, region, and profile with config-backed defaults.
 
@@ -339,7 +333,6 @@ def ask_connect_defaults() -> tuple:
     _offer_save(iid, region, profile)
     return iid, region, profile
 
-
 def connect_args(iid: str, region: str, profile: str) -> list:
     """Build the common --instance-id / --region / --profile arg list."""
     args = ["--instance-id", iid]
@@ -348,7 +341,7 @@ def connect_args(iid: str, region: str, profile: str) -> list:
     return args
 
 
-# ── Tool runner + logging ─────────────────────────────────────────────────────
+# ── Tool runner + logging ────────────────────────────────────────────────────
 
 def _log(script: str, args: list[str], returncode: int, elapsed: float):
     try:
@@ -367,7 +360,6 @@ def _log(script: str, args: list[str], returncode: int, elapsed: float):
     except Exception:
         pass  # never let logging break the launcher
 
-
 def _run(script: str, args: list[str]):
     print()
     print("  " + "─" * 40)
@@ -381,33 +373,100 @@ def _run(script: str, args: list[str]):
     _input("  Press Enter to return to menu…")
 
 
+# ── Tool definitions ────────────────────────────────────────────────────
+
+CONTACTS_HANDLED_QUESTIONS = [
+    {"label": "Month", "arg": "--month", "type": "date", "formats": ["YYYY-MM"], "required": False},
+    {"label": "Timezone", "arg": "--timezone", "required": False},
+]
+
+CONTACT_INSPECT_QUESTIONS = [
+    {"label": "Contact ID", "arg": "--contact-id", "required": True},
+    {"label": "Include full transcript?", "arg": "--transcript", "type": "bool"},
+]
+
+CONTACT_RECORDINGS_QUESTIONS = [
+    {"label": "Contact ID", "arg": "--contact-id", "required": True},
+    {"label": "URL expiry (secs)", "arg": "--url-expires", "required": False, "default": "3600"},
+]
+
+FLOW_TO_CHART_QUESTIONS = [
+    {"label": "Flow JSON file path", "arg": None, "standalone": True, "required": True},
+    {"label": "Format", "arg": "--format", "type": "choice", "choices": ["html", "mermaid", "dot"], "default": "html"},
+    {"label": "Output file", "arg": "--output", "required": False},
+]
+
+CID_JOURNEY_QUESTIONS = [
+    {"label": "xlsx file path (from CID_Search Log Insights run)", "arg": None, "standalone": True, "required": True},
+    {"label": "Output HTML file", "arg": "--output", "required": False},
+]
+
+AGENT_LIST_QUESTIONS = [
+    {"label": "Search username (leave blank for all)", "arg": "--search", "required": False},
+    {"label": "Filter by routing profile name", "arg": "--routing-profile", "required": False},
+    {"label": "Output CSV file (leave blank to print table)", "arg": "--csv", "required": False},
+]
+
+def tool_runner(tool_name: str, script_name: str, questions: list, connect_tool: bool = True):
+    _header(tool_name)
+    args = []
+    if connect_tool:
+        iid, region, profile = ask_connect_defaults()
+        args = connect_args(iid, region, profile)
+
+    for q in questions:
+        q_type = q.get("type", "text")
+        label = q["label"]
+        arg_name = q.get("arg")
+        required = q.get("required", False)
+        default = q.get("default", "")
+        
+        val = None
+
+        if q_type == "date":
+            formats = q["formats"]
+            val = ask_date(label, formats, required=required, default=default)
+        elif q_type == "choice":
+            choices = q["choices"]
+            val = ask_choice(label, choices, default=default)
+        elif q_type == "bool":
+            val = ask_bool(label, default=default)
+        else: # text
+            val = ask(label, required=required, default=default)
+
+        if val:
+            # Check if the question is a standalone argument
+            if "standalone" in q and q["standalone"]:
+                args.append(str(val))
+            elif arg_name:
+                if isinstance(val, bool):
+                    args.append(arg_name)
+                else:
+                    # For some cases, the value of the argument is not what we want to pass to the script
+                    # For example, in tool_contact_logs, the format can be "json" or "text"
+                    # but we only want to pass "--text" if the format is "text"
+                    if "val_map" in q and str(val) in q["val_map"]:
+                        mapped_val = q["val_map"][str(val)]
+                        if mapped_val: # mapped_val can be None if we don't want to add any argument
+                            args.append(mapped_val)
+                    else:
+                        args += [arg_name, str(val)]
+
+    _run(script_name, args)
+
+
 # ── Tool: Contacts Handled ────────────────────────────────────────────────────
 
+
 def tool_contacts_handled():
-    _header("Contacts Handled")
-    iid, region, profile = ask_connect_defaults()
-    month = ask_date("Month", ["YYYY-MM"], required=False)
-    tz    = ask("Timezone",        required=False)
-
-    args = connect_args(iid, region, profile)
-    if month: args += ["--month",    month]
-    if tz:    args += ["--timezone", tz]
-
-    _run("contacts_handled.py", args)
+    tool_runner("Contacts Handled", "contacts_handled.py", CONTACTS_HANDLED_QUESTIONS)
 
 
 # ── Tool: Contact Inspect ─────────────────────────────────────────────────────
 
+
 def tool_contact_inspect():
-    _header("Contact Inspect")
-    iid, region, profile = ask_connect_defaults()
-    cid   = ask("Contact ID")
-    trans = ask_bool("Include full transcript?")
-
-    args = connect_args(iid, region, profile) + ["--contact-id", cid]
-    if trans: args += ["--transcript"]
-
-    _run("contact_inspect.py", args)
+    tool_runner("Contact Inspect", "contact_inspect.py", CONTACT_INSPECT_QUESTIONS)
 
 
 # ── Tool: Contact Search ──────────────────────────────────────────────────────
@@ -483,16 +542,9 @@ def tool_contact_logs():
 
 # ── Tool: Contact Recordings ─────────────────────────────────────────────────
 
+
 def tool_contact_recordings():
-    _header("Contact Recordings")
-    iid, region, profile = ask_connect_defaults()
-    cid     = ask("Contact ID")
-    expires = ask("URL expiry (secs)", required=False, default="3600")
-
-    args = connect_args(iid, region, profile) + ["--contact-id", cid]
-    if expires != "3600": args += ["--url-expires", expires]
-
-    _run("contact_recordings.py", args)
+    tool_runner("Contact Recordings", "contact_recordings.py", CONTACT_RECORDINGS_QUESTIONS)
 
 
 # ── Tool: Export Flow ─────────────────────────────────────────────────────────
@@ -522,17 +574,9 @@ def tool_export_flow():
 
 # ── Tool: Flow to Chart ───────────────────────────────────────────────────────
 
+
 def tool_flow_to_chart():
-    _header("Flow to Chart")
-    flow_file = ask("Flow JSON file path")
-    fmt       = ask_choice("Format", ["html", "mermaid", "dot"], default="html")
-    output    = ask("Output file", required=False)
-
-    args = [flow_file, "--format", fmt]
-    if output:
-        args += ["--output", output]
-
-    _run("flow_to_chart.py", args)
+    tool_runner("Flow to Chart", "flow_to_chart.py", FLOW_TO_CHART_QUESTIONS, connect_tool=False)
 
 
 # ── Tool: Log Insights ────────────────────────────────────────────────────────
@@ -542,19 +586,16 @@ def _list_queries() -> list[Path]:
         return []
     return sorted(p for p in QUERIES_DIR.iterdir() if p.suffix in (".sql", ".txt"))
 
-
 def _display_name(path: Path) -> str:
     """CID_Search.sql → CID Search"""
     return path.stem.replace("_", " ")
 
-
 def _parse_display_columns(query: str) -> list[str] | None:
     """Extract column names from the | display line, or None if not present."""
-    m = re.search(r"^\s*\|\s*display\s+(.+)$", query, re.IGNORECASE | re.MULTILINE)
+    m = re.search(r"^\s*|\s*display\s+(.+)$\s*", query, re.IGNORECASE | re.MULTILINE)
     if not m:
         return None
     return [c.strip() for c in m.group(1).split(",") if c.strip()]
-
 
 def _select_columns(columns: list[str]) -> list[str]:
     """Let the user exclude columns by number. Returns the kept columns."""
@@ -575,15 +616,14 @@ def _select_columns(columns: list[str]) -> list[str]:
             print(f"  \033[33m  Enter a number 1–{len(columns)}\033[0m")
     return [c for i, c in enumerate(columns) if i not in excluded]
 
-
 def _rewrite_display(query: str, columns: list[str]) -> str:
     """Replace the | display line with the given columns."""
     new_display = "| display " + ", ".join(columns)
     return re.sub(
-        r"^\s*\|\s*display\s+.+$", new_display, query,
+        r"^\s*|\s*display\s+.+$", new_display,
+        query,
         flags=re.IGNORECASE | re.MULTILINE,
     )
-
 
 def _read_adhoc_query() -> str | None:
     """Prompt the user to paste a multi-line query. Returns text or None to cancel."""
@@ -600,7 +640,6 @@ def _read_adhoc_query() -> str | None:
     except EOFError:
         pass
     return "\n".join(lines).strip() or None
-
 
 def tool_log_insights():
     # ── Pick a query ──────────────────────────────────────────────────────────
@@ -704,16 +743,9 @@ def tool_log_insights():
 
 # ── Tool: CID Journey ─────────────────────────────────────────────────────────
 
+
 def tool_cid_journey():
-    _header("CID Journey")
-    xlsx_file = ask("xlsx file path (from CID_Search Log Insights run)")
-    output    = ask("Output HTML file", required=False)
-
-    args = [xlsx_file]
-    if output:
-        args += ["--output", output]
-
-    _run("cid_journey.py", args)
+    tool_runner("CID Journey", "cid_journey.py", CID_JOURNEY_QUESTIONS, connect_tool=False)
 
 
 # ── Tool: Agent Activity ──────────────────────────────────────────────────────
@@ -748,21 +780,9 @@ def tool_agent_activity():
 
 # ── Tool: Agent List ──────────────────────────────────────────────────────────
 
+
 def tool_agent_list():
-    _header("Agents", "Agent List")
-    iid, region, profile = ask_connect_defaults()
-    search = ask("Search username (leave blank for all)", required=False)
-    rp     = ask("Filter by routing profile name", required=False)
-
-    args = connect_args(iid, region, profile)
-    if search: args += ["--search", search]
-    if rp:     args += ["--routing-profile", rp]
-
-    output = ask("Output CSV file (leave blank to print table)", required=False)
-    if output:
-        args += ["--csv", output]
-
-    _run("agent_list.py", args)
+    tool_runner("Agent List", "agent_list.py", AGENT_LIST_QUESTIONS)
 
 
 # ── Tool: Settings ────────────────────────────────────────────────────────────
