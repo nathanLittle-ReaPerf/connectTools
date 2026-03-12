@@ -87,16 +87,20 @@ def fetch_references(client, instance_id, contact_id):
 
 def fetch_lens_voice(client, instance_id, contact_id):
     """
-    ListRealtimeContactAnalysisSegments (voice).
+    ListRealtimeContactAnalysisSegmentsV2 (voice).
     Returns (segments, error_string). Rate limit: 1 req/s burst 2.
     """
     segs, token = [], None
     while True:
-        kwargs = dict(InstanceId=instance_id, ContactId=contact_id)
+        kwargs = dict(
+            InstanceId=instance_id,
+            ContactId=contact_id,
+            SegmentTypes=["TRANSCRIPT", "CATEGORIES", "ISSUES", "SENTIMENT"],
+        )
         if token:
             kwargs["NextToken"] = token
         try:
-            resp = client.list_realtime_contact_analysis_segments(**kwargs)
+            resp = client.list_realtime_contact_analysis_segments_v2(**kwargs)
         except ClientError as e:
             return None, str(e)
         segs.extend(resp.get("Segments", []))
@@ -184,7 +188,7 @@ def collect_lens(client, instance_id, contact):
     Returns a dict with one of these shapes:
       {"skipped": "reason"}          — outside window or unsupported channel
       {"error": "message"}           — API call failed
-      {"segments": [...]}            — success (voice)
+      {"segments": [...]}            — success (voice, status omitted if absent)
       {"segments": [...], "status":} — success (chat)
     """
     channel = contact.get("Channel", "")
