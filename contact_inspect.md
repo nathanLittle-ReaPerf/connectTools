@@ -54,7 +54,7 @@ python contact_inspect.py --instance-id f79da75c-... --contact-id abc123-... --j
 connect:DescribeContact
 connect:GetContactAttributes
 connect:ListContactReferences
-connect:ListRealtimeContactAnalysisSegments
+connect:ListRealtimeContactAnalysisSegmentsV2
 connect:DescribeQueue
 connect:DescribeUser
 ```
@@ -68,8 +68,7 @@ connect:DescribeUser
 | `ListContactReferences` | Recordings, analysis links, attachments |
 | `DescribeQueue` | Resolve queue ID → name |
 | `DescribeUser` | Resolve agent ID → full name |
-| `ListRealtimeContactAnalysisSegments` | Voice Contact Lens transcript + sentiment |
-| `ListRealtimeContactAnalysisSegmentsV2` | Chat/email Contact Lens transcript + sentiment |
+| `ListRealtimeContactAnalysisSegmentsV2` | Contact Lens transcript + sentiment (all channels) |
 
 ## Changelog
 
@@ -79,3 +78,4 @@ connect:DescribeUser
 | v2 | `--region` defaults to CloudShell/session region instead of hardcoded `us-east-1` |
 | v3 | Queue name resolved via `DescribeQueue` and displayed above queue ID; agent full name resolved via `DescribeUser` and displayed above agent ID |
 | v4 | System endpoint added to output |
+| v5 | Migrated voice Contact Lens to `ListRealtimeContactAnalysisSegmentsV2` — v1 API removed from newer boto3 |
