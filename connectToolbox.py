@@ -96,12 +96,21 @@ def clear_screen():
 
 # ── Generic arrow-key menu ────────────────────────────────────────────────────
 
-def pick_menu(title: str, options: list[str], quit_label: str = "back") -> int | None:
-    """Arrow-key or number selection. Returns 0-based index or None to go back/quit."""
-    n = len(options)
+def pick_menu(
+    title: str,
+    options: list,
+    quit_label: str = "back",
+    descriptions: list = None,
+) -> int | None:
+    """Arrow-key or number selection. Returns 0-based index or None to go back/quit.
+
+    options: list of display names (str)
+    descriptions: optional list of short tooltip strings, same length as options
+    """
+    n    = len(options)
+    desc = descriptions or [""] * n
 
     if _MINTTY:
-        # mintty / Git Bash: raw keypresses don't work — use plain numbered input
         while True:
             clear_screen()
             print(f"\n  {title}")
@@ -110,6 +119,8 @@ def pick_menu(title: str, options: list[str], quit_label: str = "back") -> int |
             for i, name in enumerate(options):
                 num = str(i + 1) if i < 9 else " "
                 print(f"     {num}.  {name}")
+                if desc[i]:
+                    print(f"          \033[90m{desc[i]}\033[0m")
             print()
             print(f"  \033[90m[1-{min(n, 9)}] select  [q] {quit_label}\033[0m\n")
             val = _input("  Choice (press Enter to confirm): ").strip()
@@ -129,8 +140,12 @@ def pick_menu(title: str, options: list[str], quit_label: str = "back") -> int |
             num = str(i + 1) if i < 9 else " "
             if i == selected:
                 print(f"  \033[7m  {num}.  {name:<30}\033[0m")
+                if desc[i]:
+                    print(f"       \033[90m{desc[i]}\033[0m")
             else:
                 print(f"     {num}.  {name}")
+                if desc[i]:
+                    print(f"          \033[90m{desc[i]}\033[0m")
         print()
         print(f"  \033[90m[↑↓] navigate  [Enter/1-{min(n, 9)}] select  [q] {quit_label}\033[0m")
 
@@ -700,28 +715,29 @@ def tool_settings():
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 
+# Each tool entry: (display_name, runner_fn, tooltip)
 GROUPS = [
     ("Contacts", [
-        ("Contacts Handled",    tool_contacts_handled),
-        ("Contact Inspect",     tool_contact_inspect),
-        ("Contact Search",      tool_contact_search),
-        ("Contact Recordings",  tool_contact_recordings),
-        ("Contact Logs",        tool_contact_logs),
+        ("Contacts Handled",   tool_contacts_handled,  "Sum CONTACTS_HANDLED across all queues for a month"),
+        ("Contact Inspect",    tool_contact_inspect,   "Full deep-dive: attributes, Lens analysis, transfer chain"),
+        ("Contact Search",     tool_contact_search,    "Search contacts by date, channel, agent, queue, or attribute"),
+        ("Contact Recordings", tool_contact_recordings,"S3 locations and presigned URLs for recordings and transcripts"),
+        ("Contact Logs",       tool_contact_logs,      "Download CloudWatch flow-execution logs for a contact"),
     ]),
     ("Flows", [
-        ("Export Flow",      tool_export_flow),
-        ("Flow to Chart",    tool_flow_to_chart),
+        ("Export Flow",        tool_export_flow,       "Export a contact flow definition to JSON by name"),
+        ("Flow to Chart",      tool_flow_to_chart,     "Convert an exported flow JSON to a visual flowchart"),
     ]),
     ("Log Insights", [
-        ("Log Insights",     tool_log_insights),
-        ("CID Journey",      tool_cid_journey),
+        ("Log Insights",       tool_log_insights,      "Run CloudWatch Logs Insights queries with variable substitution"),
+        ("CID Journey",        tool_cid_journey,       "Visual journey map from a CID_Search xlsx export"),
     ]),
     ("Agents", [
-        ("Agent Activity",   tool_agent_activity),
-        ("Agent List",       tool_agent_list),
+        ("Agent Activity",     tool_agent_activity,    "Agent handle time and activity report by date range"),
+        ("Agent List",         tool_agent_list,        "List agents with routing profile, hierarchy, and security profiles"),
     ]),
     ("Settings", [
-        ("Settings",         tool_settings),
+        ("Settings",           tool_settings,          "View and edit saved instance ID, region, and profile defaults"),
     ]),
 ]
 
@@ -831,8 +847,14 @@ def main():
                 break
             group_name, tools = GROUPS[group_idx]
             tool_names = [t[0] for t in tools]
+            tool_descs = [t[2] if len(t) > 2 else "" for t in tools]
             while True:
-                tool_idx = pick_menu(f"{TITLE}  ›  {group_name}", tool_names, quit_label="back")
+                tool_idx = pick_menu(
+                    f"{TITLE}  ›  {group_name}",
+                    tool_names,
+                    quit_label="back",
+                    descriptions=tool_descs,
+                )
                 if tool_idx is None:
                     break
                 try:
