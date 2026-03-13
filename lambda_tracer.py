@@ -258,6 +258,81 @@ def print_human(contact_id, invocations_with_logs, show_logs=True):
     print()
 
 
+# ── Interactive drill-down ─────────────────────────────────────────────────────
+
+def drill_down_loop(logs_client, invocations_with_logs):
+    """After showing the summary, let the user pick an invocation to see full logs."""
+    if not invocations_with_logs:
+        return
+    count = len(invocations_with_logs)
+    while True:
+        try:
+            raw = input(f"  Enter invocation number for full logs (1-{count}), or Enter to exit: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if not raw:
+            break
+        try:
+            idx = int(raw)
+        except ValueError:
+            print(f"  Please enter a number between 1 and {count}.")
+            continue
+        if idx < 1 or idx > count:
+            print(f"  Please enter a number between 1 and {count}.")
+            continue
+
+        item = invocations_with_logs[idx - 1]
+        inv  = item["invocation"]
+
+        # Fetch on demand if not already retrieved
+        if not item["lambda_logs"]:
+            print(f"  Fetching logs for {inv['function_name']}...", file=sys.stderr)
+            item["lambda_logs"] = fetch_lambda_logs(logs_client, inv["function_name"], inv["invoked_at"])
+
+        logs = item["lambda_logs"]
+        _hr()
+        print(f"  [{idx}] {inv['function_name']}  —  Lambda logs (±{LAMBDA_WINDOW_SECS}s window)")
+        _hr()
+        if logs:
+            for entry in logs:
+                ts  = entry["timestamp"][11:23]
+                msg = entry["message"].rstrip()
+                if len(msg) > 200:
+                    msg = msg[:197] + "..."
+                print(f"    {ts}  {msg}")
+        else:
+            print(f"    (no log events found — check IAM or log group /aws/lambda/{inv['function_name']})")
+        _hr()
+        print()
+
+        # Offer to save to file
+        try:
+            dest = input("  Save to file? Enter filename (or Enter to skip): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if dest:
+            def serial(o):
+                return o.isoformat() if hasattr(o, "isoformat") else str(o)
+            doc = {
+                "function_name":    inv["function_name"],
+                "function_arn":     inv["function_arn"],
+                "invoked_at":       inv["invoked_at"].isoformat(),
+                "result":           inv["result"],
+                "connect_response": inv["connect_response"],
+                "flow_name":        inv["flow_name"],
+                "lambda_logs":      logs,
+            }
+            try:
+                with open(dest, "w", encoding="utf-8") as f:
+                    json.dump(doc, f, indent=2, default=serial)
+                print(f"  Saved → {dest}")
+            except OSError as e:
+                print(f"  Error saving: {e}")
+        print()
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -350,6 +425,8 @@ def main():
             print(out)
     else:
         print_human(args.contact_id, invocations_with_logs, show_logs=not args.summary)
+        if args.summary:
+            drill_down_loop(logs_client, invocations_with_logs)
 
 
 if __name__ == "__main__":
