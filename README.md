@@ -29,6 +29,7 @@ The toolbox is an interactive menu launcher — select a tool with arrow keys or
 | [`cid_journey.py`](#cid_journeypy) | Render a Cytoscape.js caller journey map from a CID Search Excel export |
 | [`agent_list.py`](#agent_listpy) | List agents with routing profile, hierarchy, and security profile details |
 | [`agent_activity.py`](#agent_activitypy) | Agent handle time and activity report by date range |
+| [`routing_profile_audit.py`](#routing_profile_auditpy) | Per-profile queue assignments, agent counts, and anomaly detection |
 | [`connectToolbox.py`](#connecttoolboxpy) | Interactive menu launcher for all tools above |
 
 ---
@@ -306,6 +307,25 @@ python agent_list.py --instance-id <UUID> --csv agents.csv
 ```
 
 **Required IAM:** `connect:ListUsers`, `connect:DescribeUser`, `connect:DescribeRoutingProfile`, `connect:DescribeUserHierarchyGroup`, `connect:DescribeSecurityProfile`
+
+---
+
+## routing_profile_audit.py
+
+Audit routing profiles: per-profile queue assignments (channel, priority, delay) and agent count. Flags profiles with no agents, profiles with no queues, and queues not assigned to any profile.
+
+```bash
+# All profiles
+python routing_profile_audit.py --instance-id <UUID> --region us-east-1
+
+# Filter to one profile
+python routing_profile_audit.py --instance-id <UUID> --name "Tier 2"
+
+# Export to CSV
+python routing_profile_audit.py --instance-id <UUID> --csv audit.csv
+```
+
+**Required IAM:** `connect:ListRoutingProfiles`, `connect:ListRoutingProfileQueues`, `connect:ListQueues`, `connect:ListUsers`
 
 ---
 

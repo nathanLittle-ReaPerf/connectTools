@@ -808,6 +808,21 @@ def tool_agent_list():
     tool_runner("Agent List", "agent_list.py", AGENT_LIST_QUESTIONS)
 
 
+# ── Tool: Routing Profile Audit ────────────────────────────────────────────────
+
+def tool_routing_profile_audit():
+    _header("Routing Profile Audit")
+    iid, region, profile = ask_connect_defaults()
+    name   = ask("Filter by profile name (leave blank for all)", required=False)
+    output = ask("CSV output file (leave blank to print)", required=False)
+
+    args = connect_args(iid, region, profile)
+    if name:   args += ["--name",   name]
+    if output: args += ["--csv",    output]
+
+    _run("routing_profile_audit.py", args)
+
+
 # ── Tool: Settings ────────────────────────────────────────────────────────────
 
 def tool_settings():
@@ -861,8 +876,9 @@ GROUPS = [
         ("CID Journey",        tool_cid_journey,       "Visual journey map from a CID_Search xlsx export"),
     ]),
     ("Agents", [
-        ("Agent Activity",     tool_agent_activity,    "Agent handle time and activity report by date range"),
-        ("Agent List",         tool_agent_list,        "List agents with routing profile, hierarchy, and security profiles"),
+        ("Agent Activity",        tool_agent_activity,       "Agent handle time and activity report by date range"),
+        ("Agent List",            tool_agent_list,           "List agents with routing profile, hierarchy, and security profiles"),
+        ("Routing Profile Audit", tool_routing_profile_audit,"Per-profile queue assignments, agent counts, and anomalies"),
     ]),
     ("Settings", [
         ("Settings",           tool_settings,          "View and edit saved instance ID, region, and profile defaults"),
