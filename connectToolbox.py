@@ -914,6 +914,26 @@ def _check_dependencies():
             "boto3 / botocore not installed",
             "pip install boto3 --user",
         ))
+        boto3 = None  # type: ignore[assignment]
+
+    # boto3 version — upgrade if below 1.35.0 to ensure full Connect API coverage
+    _MIN_BOTO3 = (1, 35, 0)
+    if boto3 is not None:
+        try:
+            _current = tuple(int(x) for x in boto3.__version__.split(".")[:3])
+        except Exception:
+            _current = (0, 0, 0)
+        if _current < _MIN_BOTO3:
+            print(f"  boto3 {boto3.__version__} is outdated — upgrading...", flush=True)
+            rc = subprocess.call(
+                [sys.executable, "-m", "pip", "install", "--upgrade", "--user", "boto3"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if rc == 0:
+                print("  boto3 upgraded successfully. Restart the toolbox to use the new version.", flush=True)
+            else:
+                print("  Warning: boto3 upgrade failed. Some features may not be available.", flush=True)
 
     # python-dateutil — auto-install if missing
     try:
