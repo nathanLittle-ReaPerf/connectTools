@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """contact-inspect: Pull all available data for an Amazon Connect contact."""
 
+from __future__ import annotations
+
 import argparse
 import datetime as dt
 import json

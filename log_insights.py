@@ -78,7 +78,9 @@ def resolve_log_group(logs, log_group_arg: str | None) -> str:
         print(f"    {i})  {g}")
     print()
     while True:
-        val = input("  Select log group (number): ").strip()
+        sys.stdout.write("  Select log group (number): ")
+        sys.stdout.flush()
+        val = sys.stdin.readline().rstrip("\r\n").strip()
         if val.isdigit() and 1 <= int(val) <= len(groups):
             return groups[int(val) - 1]
         print(f"  Enter a number between 1 and {len(groups)}.")

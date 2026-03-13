@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """export-flow: Export an Amazon Connect contact flow to JSON by name."""
 
+from __future__ import annotations
+
 import argparse
 import json
 import re
