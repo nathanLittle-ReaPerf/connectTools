@@ -123,25 +123,38 @@ def list_queues(client, instance_id):
     return queue_map
 
 
-def count_agents_for_rp(client, instance_id, rp_id):
-    """Return the number of users assigned to a routing profile via ListRoutingProfileUsers."""
-    count, token = 0, None
+def build_agent_counts(client, instance_id):
+    """Return {rp_id: agent_count} by listing all users and describing each one."""
+    # Step 1: collect all user IDs
+    user_ids, token = [], None
     while True:
-        kwargs = {"InstanceId": instance_id, "RoutingProfileId": rp_id, "MaxResults": 100}
+        kwargs = {"InstanceId": instance_id, "MaxResults": 100}
         if token:
             kwargs["NextToken"] = token
         try:
-            resp = client.list_routing_profile_users(**kwargs)
+            resp = client.list_users(**kwargs)
         except ClientError as e:
-            code = e.response["Error"]["Code"]
-            print(f"  Warning: could not count agents for profile [{code}]: {e.response['Error']['Message']}",
-                  file=sys.stderr)
-            return 0
-        count += len(resp.get("UserSummaryList", []))
+            _fatal("ListUsers", e)
+        user_ids.extend(u["Id"] for u in resp.get("UserSummaryList", []))
         token = resp.get("NextToken")
         if not token:
             break
-    return count
+
+    # Step 2: describe each user to get their RoutingProfileId
+    counts: dict[str, int] = {}
+    total = len(user_ids)
+    print(f"  Counting agents ({total} users)...", file=sys.stderr)
+    for i, uid in enumerate(user_ids, 1):
+        if i % 25 == 0 or i == total:
+            print(f"    {i}/{total}", file=sys.stderr)
+        try:
+            user = client.describe_user(InstanceId=instance_id, UserId=uid)["User"]
+            rp_id = user.get("RoutingProfileId")
+            if rp_id:
+                counts[rp_id] = counts.get(rp_id, 0) + 1
+        except ClientError:
+            pass
+    return counts
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -178,7 +191,9 @@ def build_report(client, instance_id, name_filter):
     print("  Loading queues...", file=sys.stderr)
     queue_map = list_queues(client, instance_id)  # {id: name}
 
-    print("  Loading queue assignments and agent counts...", file=sys.stderr)
+    agent_counts = build_agent_counts(client, instance_id)
+
+    print("  Loading queue assignments...", file=sys.stderr)
     profile_data = []
     queues_in_any_rp: set = set()
     for p in profiles:
@@ -187,12 +202,11 @@ def build_report(client, instance_id, name_filter):
         for q in queues:
             q["queue_name"] = queue_map.get(q["queue_id"], q["queue_name"])
             queues_in_any_rp.add(q["queue_id"])
-        agent_count = count_agents_for_rp(client, instance_id, rp_id)
         profile_data.append({
             "id":          rp_id,
             "name":        p["Name"],
             "arn":         p.get("Arn", ""),
-            "agent_count": agent_count,
+            "agent_count": agent_counts.get(rp_id, 0),
             "queues":      queues,
         })
 
