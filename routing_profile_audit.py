@@ -124,8 +124,11 @@ def list_queues(client, instance_id):
 
 
 def build_agent_counts(client, instance_id, profile_ids):
-    """Return {rp_id: agent_count} using ListRoutingProfileUsers per profile."""
+    """Return {rp_id: agent_count} using ListRoutingProfileUsers per profile.
+    Falls back to ListUsers + DescribeUser if the API is unavailable (older boto3)."""
     counts: dict[str, int] = {}
+
+    # Try ListRoutingProfileUsers (requires boto3 >= 1.35)
     for rp_id in profile_ids:
         count, token = 0, None
         while True:
@@ -134,6 +137,9 @@ def build_agent_counts(client, instance_id, profile_ids):
                 kwargs["NextToken"] = token
             try:
                 resp = client.list_routing_profile_users(**kwargs)
+            except AttributeError:
+                # API not available in this boto3 version — fall back
+                return _build_agent_counts_fallback(client, instance_id)
             except ClientError as e:
                 code = e.response["Error"]["Code"]
                 print(f"  Warning: could not count agents for profile [{code}]: {e.response['Error']['Message']}",
@@ -144,6 +150,38 @@ def build_agent_counts(client, instance_id, profile_ids):
             if not token:
                 break
         counts[rp_id] = count
+    return counts
+
+
+def _build_agent_counts_fallback(client, instance_id):
+    """Fallback: ListUsers + DescribeUser to get {rp_id: agent_count}."""
+    print("  (boto3 too old for ListRoutingProfileUsers — using DescribeUser fallback)", file=sys.stderr)
+    user_ids, token = [], None
+    while True:
+        kwargs = {"InstanceId": instance_id, "MaxResults": 100}
+        if token:
+            kwargs["NextToken"] = token
+        try:
+            resp = client.list_users(**kwargs)
+        except ClientError as e:
+            _fatal("ListUsers", e)
+        user_ids.extend(u["Id"] for u in resp.get("UserSummaryList", []))
+        token = resp.get("NextToken")
+        if not token:
+            break
+
+    counts: dict[str, int] = {}
+    total = len(user_ids)
+    for i, uid in enumerate(user_ids, 1):
+        if i % 25 == 0 or i == total:
+            print(f"    {i}/{total}", file=sys.stderr)
+        try:
+            user = client.describe_user(InstanceId=instance_id, UserId=uid)["User"]
+            rp_id = user.get("RoutingProfileId")
+            if rp_id:
+                counts[rp_id] = counts.get(rp_id, 0) + 1
+        except ClientError:
+            pass
     return counts
 
 
