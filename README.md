@@ -22,6 +22,7 @@ The toolbox is an interactive menu launcher — select a tool with arrow keys or
 | [`contact_search.py`](#contact_searchpy) | Search contacts by time range and optional filters; export to CSV or JSON |
 | [`contact_recordings.py`](#contact_recordingspy) | S3 locations and presigned URLs for a contact's recordings and transcripts |
 | [`contact_logs.py`](#contact_logspy) | Download CloudWatch flow-execution logs for a contact ID |
+| [`lambda_tracer.py`](#lambda_tracerpy) | Trace Lambda invocations and fetch execution logs for a contact |
 | [`export_flow.py`](#export_flowpy) | Export a contact flow's JSON definition by name |
 | [`flow_to_chart.py`](#flow_to_chartpy) | Convert an exported flow JSON to an interactive flowchart (HTML, Mermaid, or DOT) |
 | [`log_insights.py`](#log_insightspy) | Run a CloudWatch Logs Insights query against Connect log groups; export to Excel |
@@ -137,6 +138,24 @@ python contact_search.py --instance-id <UUID> --start 2026-03-01 --end 2026-03-0
 **Required IAM:** `connect:SearchContacts`
 
 `SearchContacts` is throttled at 0.5 req/s — the script sleeps between pages and prints live progress.
+
+---
+
+## lambda_tracer.py
+
+Trace every Lambda function invoked during a contact. Pulls Connect flow-execution logs to find Lambda invocations, then fetches the actual Lambda CloudWatch logs around each invocation timestamp.
+
+```bash
+# Human-readable trace
+python lambda_tracer.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
+
+# Save to JSON
+python lambda_tracer.py --instance-id <UUID> --contact-id <UUID> --output trace.json
+```
+
+**Required IAM:** `connect:DescribeContact`, `connect:DescribeInstance`, `logs:FilterLogEvents` (on both the Connect log group and each `/aws/lambda/<function-name>` log group)
+
+Lambda logs are fetched within ±30 seconds of the Connect-reported invocation time. If a function has high concurrency, log lines from concurrent invocations may appear in the window.
 
 ---
 
@@ -346,6 +365,7 @@ Works on both Linux (AWS CloudShell) and Windows (local — see [winpty requirem
 | contact_search | `connect:SearchContacts` |
 | contact_recordings | `connect:DescribeContact`, `connect:ListInstanceStorageConfigs`, `s3:ListBucket`, `s3:GetObject` |
 | contact_logs | `connect:DescribeContact`, `connect:DescribeInstance`, `logs:FilterLogEvents` |
+| lambda_tracer | `connect:DescribeContact`, `connect:DescribeInstance`, `logs:FilterLogEvents` (Connect + Lambda log groups) |
 | export_flow | `connect:ListContactFlows`, `connect:DescribeContactFlow` |
 | flow_to_chart | *(no AWS calls)* |
 | log_insights | `logs:DescribeLogGroups`, `logs:StartQuery`, `logs:GetQueryResults` |
