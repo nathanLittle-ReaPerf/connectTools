@@ -931,7 +931,9 @@ def _check_dependencies():
                 stderr=subprocess.DEVNULL,
             )
             if rc == 0:
-                print("  boto3 upgraded successfully. Restart the toolbox to use the new version.", flush=True)
+                print("  boto3 upgraded — restarting...", flush=True)
+                import os
+                os.execv(sys.executable, [sys.executable] + sys.argv)
             else:
                 print("  Warning: boto3 upgrade failed. Some features may not be available.", flush=True)
 

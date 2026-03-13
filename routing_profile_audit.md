@@ -32,16 +32,14 @@ python routing_profile_audit.py --instance-id <UUID> --json | jq '.anomalies'
 - `ListRoutingProfiles`
 - `ListRoutingProfileQueues`
 - `ListQueues`
-- `ListUsers`
-- `DescribeUser`
+- `ListRoutingProfileUsers`
 
 ## Required IAM
 
 - `connect:ListRoutingProfiles`
 - `connect:ListRoutingProfileQueues`
 - `connect:ListQueues`
-- `connect:ListUsers`
-- `connect:DescribeUser`
+- `connect:ListRoutingProfileUsers`
 
 ## Anomalies Detected
 

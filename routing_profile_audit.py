@@ -123,37 +123,27 @@ def list_queues(client, instance_id):
     return queue_map
 
 
-def build_agent_counts(client, instance_id):
-    """Return {rp_id: agent_count} by listing all users and describing each one."""
-    # Step 1: collect all user IDs
-    user_ids, token = [], None
-    while True:
-        kwargs = {"InstanceId": instance_id, "MaxResults": 100}
-        if token:
-            kwargs["NextToken"] = token
-        try:
-            resp = client.list_users(**kwargs)
-        except ClientError as e:
-            _fatal("ListUsers", e)
-        user_ids.extend(u["Id"] for u in resp.get("UserSummaryList", []))
-        token = resp.get("NextToken")
-        if not token:
-            break
-
-    # Step 2: describe each user to get their RoutingProfileId
+def build_agent_counts(client, instance_id, profile_ids):
+    """Return {rp_id: agent_count} using ListRoutingProfileUsers per profile."""
     counts: dict[str, int] = {}
-    total = len(user_ids)
-    print(f"  Counting agents ({total} users)...", file=sys.stderr)
-    for i, uid in enumerate(user_ids, 1):
-        if i % 25 == 0 or i == total:
-            print(f"    {i}/{total}", file=sys.stderr)
-        try:
-            user = client.describe_user(InstanceId=instance_id, UserId=uid)["User"]
-            rp_id = user.get("RoutingProfileId")
-            if rp_id:
-                counts[rp_id] = counts.get(rp_id, 0) + 1
-        except ClientError:
-            pass
+    for rp_id in profile_ids:
+        count, token = 0, None
+        while True:
+            kwargs = {"InstanceId": instance_id, "RoutingProfileId": rp_id, "MaxResults": 100}
+            if token:
+                kwargs["NextToken"] = token
+            try:
+                resp = client.list_routing_profile_users(**kwargs)
+            except ClientError as e:
+                code = e.response["Error"]["Code"]
+                print(f"  Warning: could not count agents for profile [{code}]: {e.response['Error']['Message']}",
+                      file=sys.stderr)
+                break
+            count += len(resp.get("UserSummaryList", []))
+            token = resp.get("NextToken")
+            if not token:
+                break
+        counts[rp_id] = count
     return counts
 
 
@@ -191,7 +181,8 @@ def build_report(client, instance_id, name_filter):
     print("  Loading queues...", file=sys.stderr)
     queue_map = list_queues(client, instance_id)  # {id: name}
 
-    agent_counts = build_agent_counts(client, instance_id)
+    print("  Counting agents per profile...", file=sys.stderr)
+    agent_counts = build_agent_counts(client, instance_id, [p["Id"] for p in profiles])
 
     print("  Loading queue assignments...", file=sys.stderr)
     profile_data = []
