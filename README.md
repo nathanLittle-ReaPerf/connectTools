@@ -5,14 +5,13 @@ A set of Python CLI tools for **Amazon Connect**. Each tool is a single self-con
 ## Quick Start
 
 ```bash
-# One-time dependency install (persists across CloudShell sessions)
-pip install python-dateutil openpyxl --user
-
-# Launch the interactive menu
+# Clone or upload scripts, then launch the toolbox
 python connectToolbox.py
 ```
 
-The toolbox is an interactive menu launcher — select a tool with arrow keys or a number key, fill in the prompts, and get results. No flags to memorize.
+The toolbox checks and auto-installs missing dependencies (`python-dateutil`, `openpyxl`) on first run. No manual pip install needed.
+
+The toolbox is an interactive menu launcher — select a tool with arrow keys or a number key, fill in the prompts, and get results. No flags to memorize. Instance ID, region, and AWS profile are saved to `~/.connecttools/config.json` after first use so you don't re-enter them every time.
 
 ## Tools
 
@@ -21,10 +20,14 @@ The toolbox is an interactive menu launcher — select a tool with arrow keys or
 | [`contacts_handled.py`](#contacts_handledpy) | Sum CONTACTS_HANDLED across all queues for a given month |
 | [`contact_inspect.py`](#contact_inspectpy) | Deep dive on a single contact — metadata, attributes, Lens transcript, transfer chain |
 | [`contact_search.py`](#contact_searchpy) | Search contacts by time range and optional filters; export to CSV or JSON |
+| [`contact_recordings.py`](#contact_recordingspy) | S3 locations and presigned URLs for a contact's recordings and transcripts |
+| [`contact_logs.py`](#contact_logspy) | Download CloudWatch flow-execution logs for a contact ID |
 | [`export_flow.py`](#export_flowpy) | Export a contact flow's JSON definition by name |
 | [`flow_to_chart.py`](#flow_to_chartpy) | Convert an exported flow JSON to an interactive flowchart (HTML, Mermaid, or DOT) |
 | [`log_insights.py`](#log_insightspy) | Run a CloudWatch Logs Insights query against Connect log groups; export to Excel |
 | [`cid_journey.py`](#cid_journeypy) | Render a Cytoscape.js caller journey map from a CID Search Excel export |
+| [`agent_list.py`](#agent_listpy) | List agents with routing profile, hierarchy, and security profile details |
+| [`agent_activity.py`](#agent_activitypy) | Agent handle time and activity report by date range |
 | [`connectToolbox.py`](#connecttoolboxpy) | Interactive menu launcher for all tools above |
 
 ---
@@ -34,14 +37,16 @@ The toolbox is an interactive menu launcher — select a tool with arrow keys or
 ### AWS CloudShell (recommended)
 
 1. Open CloudShell from the AWS Console (terminal icon, top right).
-2. Upload scripts via **Actions → Upload file**, or clone this repo.
-3. Install the one-time dependencies:
+2. Clone this repo: `git clone <repo-url>`
+3. Run the toolbox — dependencies are checked and installed automatically:
 
 ```bash
-pip install python-dateutil openpyxl --user
+python connectToolbox.py
 ```
 
 ### Local Development (Windows — Cmder / Git Bash)
+
+Install dependencies manually if not using the toolbox:
 
 ```bash
 pip install boto3 python-dateutil openpyxl
@@ -103,7 +108,7 @@ python contact_inspect.py --instance-id <UUID> --contact-id <UUID> --transcript
 python contact_inspect.py --instance-id <UUID> --contact-id <UUID> --json | jq '.contact.Channel'
 ```
 
-**Required IAM:** `connect:DescribeContact`, `connect:GetContactAttributes`, `connect:ListContactReferences`, `connect:ListRealtimeContactAnalysisSegments`
+**Required IAM:** `connect:DescribeContact`, `connect:GetContactAttributes`, `connect:ListContactReferences`, `connect:ListRealtimeContactAnalysisSegmentsV2`, `connect:DescribeQueue`, `connect:DescribeUser`
 
 Contact Lens data has a 24-hour retention window — the tool detects expired contacts and explains why rather than returning silently empty results.
 
@@ -222,6 +227,93 @@ Produces a self-contained HTML file showing each contact leg as a node, with edg
 
 ---
 
+## contact_recordings.py
+
+Locate the S3 paths and generate presigned download URLs for a contact's recordings and transcripts — original and redacted — for both voice and chat.
+
+```bash
+python contact_recordings.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
+
+# Extend presigned URL expiry to 2 hours
+python contact_recordings.py --instance-id <UUID> --contact-id <UUID> --url-expires 7200
+
+# Raw JSON
+python contact_recordings.py --instance-id <UUID> --contact-id <UUID> --json
+```
+
+**Required IAM:** `connect:DescribeContact`, `connect:ListInstanceStorageConfigs`, `s3:ListBucket`, `s3:GetObject`
+
+Presigned URLs default to 1-hour expiry. CloudShell IAM role credentials cap URLs at 1 hour regardless of the requested value — a note is printed if you request longer. Values above 7 days (604800s) are clamped automatically.
+
+---
+
+## contact_logs.py
+
+Download CloudWatch flow-execution logs for a contact ID.
+
+```bash
+# JSON output (default)
+python contact_logs.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
+
+# Plain text
+python contact_logs.py --instance-id <UUID> --contact-id <UUID> --text
+
+# Override log group if auto-discovery gets the casing wrong
+python contact_logs.py --instance-id <UUID> --contact-id <UUID> --log-group /aws/connect/myInstance
+```
+
+**Required IAM:** `connect:DescribeContact`, `connect:DescribeInstance`, `logs:FilterLogEvents`
+
+The log group is auto-discovered from the instance alias. If the alias casing doesn't match the actual log group name, pass `--log-group` to override — the toolbox saves the correct name per instance so you only enter it once.
+
+---
+
+## agent_list.py
+
+List agents with routing profile, hierarchy group, and security profile details.
+
+```bash
+# All agents
+python agent_list.py --instance-id <UUID> --region us-east-1
+
+# Search by username substring
+python agent_list.py --instance-id <UUID> --search "john"
+
+# Filter by routing profile
+python agent_list.py --instance-id <UUID> --routing-profile "Support"
+
+# Export to CSV
+python agent_list.py --instance-id <UUID> --csv agents.csv
+```
+
+**Required IAM:** `connect:ListUsers`, `connect:DescribeUser`, `connect:DescribeRoutingProfile`, `connect:DescribeUserHierarchyGroup`, `connect:DescribeSecurityProfile`
+
+---
+
+## agent_activity.py
+
+Agent handle time and activity report by date range or named period.
+
+```bash
+# Named period
+python agent_activity.py --instance-id <UUID> --period last-month
+
+# Custom date range
+python agent_activity.py --instance-id <UUID> --start 2026-03-01 --end 2026-03-31
+
+# Filter to a specific agent
+python agent_activity.py --instance-id <UUID> --period last-month --agent jsmith
+
+# Export to CSV
+python agent_activity.py --instance-id <UUID> --period last-month --output activity.csv
+```
+
+Named periods: `today`, `yesterday`, `this-week`, `last-week`, `this-month`, `last-month`
+
+**Required IAM:** `connect:ListUsers`, `connect:DescribeUser`, `connect:GetMetricDataV2`
+
+---
+
 ## connectToolbox.py
 
 Interactive terminal menu that wraps all tools above.
@@ -250,9 +342,13 @@ Works on both Linux (AWS CloudShell) and Windows (local — see [winpty requirem
 | Tool | Permissions Required |
 |---|---|
 | contacts_handled | `connect:ListQueues`, `connect:GetMetricDataV2`, `sts:GetCallerIdentity` |
-| contact_inspect | `connect:DescribeContact`, `connect:GetContactAttributes`, `connect:ListContactReferences`, `connect:ListRealtimeContactAnalysisSegments` |
+| contact_inspect | `connect:DescribeContact`, `connect:GetContactAttributes`, `connect:ListContactReferences`, `connect:ListRealtimeContactAnalysisSegmentsV2`, `connect:DescribeQueue`, `connect:DescribeUser` |
 | contact_search | `connect:SearchContacts` |
+| contact_recordings | `connect:DescribeContact`, `connect:ListInstanceStorageConfigs`, `s3:ListBucket`, `s3:GetObject` |
+| contact_logs | `connect:DescribeContact`, `connect:DescribeInstance`, `logs:FilterLogEvents` |
 | export_flow | `connect:ListContactFlows`, `connect:DescribeContactFlow` |
 | flow_to_chart | *(no AWS calls)* |
 | log_insights | `logs:DescribeLogGroups`, `logs:StartQuery`, `logs:GetQueryResults` |
 | cid_journey | *(no AWS calls)* |
+| agent_list | `connect:ListUsers`, `connect:DescribeUser`, `connect:DescribeRoutingProfile`, `connect:DescribeUserHierarchyGroup`, `connect:DescribeSecurityProfile` |
+| agent_activity | `connect:ListUsers`, `connect:DescribeUser`, `connect:GetMetricDataV2` |

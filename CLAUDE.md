@@ -8,9 +8,9 @@ A growing set of Python CLI tools for **Amazon Connect**. Each tool is a single 
 
 ## Setup
 
-Install the one external dependency (persists across CloudShell sessions):
+Dependencies (`python-dateutil`, `openpyxl`) are auto-installed by `connectToolbox.py` on first run. For running individual scripts directly:
 ```bash
-pip install python-dateutil --user
+pip install python-dateutil openpyxl --user
 ```
 
 ## Tools
