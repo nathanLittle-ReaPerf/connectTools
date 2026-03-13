@@ -194,7 +194,7 @@ def fetch_lambda_logs(logs_client, function_name: str, invoked_at: dt.datetime) 
     start_ms  = _ms(invoked_at - window)
     end_ms    = _ms(invoked_at + window)
 
-    raw = filter_log_events(logs_client, log_group, '""', start_ms, end_ms)
+    raw = filter_log_events(logs_client, log_group, "", start_ms, end_ms)
     return [
         {
             "timestamp": dt.datetime.fromtimestamp(
