@@ -290,8 +290,28 @@ def print_human(contact, artifacts, expires):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+_MAX_URL_EXPIRES = 604800  # 7 days — S3 presigned URL hard cap with long-term credentials
+_CLOUDSHELL_CAP  = 3600   # IAM role credentials (CloudShell) cap at 1 hour regardless
+
+
 def main():
     args = parse_args()
+
+    if args.url_expires > _MAX_URL_EXPIRES:
+        print(
+            f"Warning: --url-expires {args.url_expires}s exceeds the S3 maximum of "
+            f"{_MAX_URL_EXPIRES}s (7 days). Clamping to {_MAX_URL_EXPIRES}s.",
+            file=sys.stderr,
+        )
+        args.url_expires = _MAX_URL_EXPIRES
+    elif args.url_expires > _CLOUDSHELL_CAP:
+        print(
+            f"Note: URL expiry set to {args.url_expires}s, but CloudShell IAM role "
+            f"credentials cap presigned URLs at {_CLOUDSHELL_CAP}s (1 hour). "
+            "If running in CloudShell the URLs will expire sooner than requested.",
+            file=sys.stderr,
+        )
+
     connect, s3 = make_clients(args.region, args.profile)
 
     contact = fetch_contact(connect, args.instance_id, args.contact_id)
