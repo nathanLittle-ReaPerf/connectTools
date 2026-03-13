@@ -851,7 +851,7 @@ GROUPS = [
 def _check_dependencies():
     """Check runtime dependencies and AWS credentials before launching the menu.
 
-    - Auto-installs python-dateutil if missing.
+    - Auto-installs python-dateutil and openpyxl if missing.
     - Prints actionable instructions for anything it can't fix.
     - Hard-exits on missing critical deps; credential issues are warnings only.
     """
@@ -897,6 +897,29 @@ def _check_dependencies():
             errors.append((
                 "python-dateutil could not be installed automatically",
                 "pip install python-dateutil --user",
+            ))
+
+    # openpyxl — required by log_insights.py and cid_journey.py; auto-install if missing
+    try:
+        import openpyxl   # noqa: F401
+    except ImportError:
+        print("  openpyxl not found — installing...", flush=True)
+        rc = subprocess.call(
+            [sys.executable, "-m", "pip", "install", "--user", "openpyxl"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if rc == 0:
+            import site
+            if hasattr(site, "getusersitepackages"):
+                user_site = site.getusersitepackages()
+                if user_site not in sys.path:
+                    sys.path.append(user_site)
+            print("  openpyxl installed successfully.", flush=True)
+        else:
+            errors.append((
+                "openpyxl could not be installed automatically",
+                "pip install openpyxl --user",
             ))
 
     # ct_config.py — must live alongside connectToolbox.py
