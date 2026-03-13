@@ -172,9 +172,12 @@ def _build_agent_counts_fallback(client, instance_id):
 
     counts: dict[str, int] = {}
     total = len(user_ids)
+    bar_width = 30
     for i, uid in enumerate(user_ids, 1):
-        if i % 25 == 0 or i == total:
-            print(f"    {i}/{total}", file=sys.stderr)
+        filled = int(bar_width * i / total)
+        bar = "█" * filled + "░" * (bar_width - filled)
+        pct = int(100 * i / total)
+        print(f"\r    [{bar}] {pct}%", end="", file=sys.stderr, flush=True)
         try:
             user = client.describe_user(InstanceId=instance_id, UserId=uid)["User"]
             rp_id = user.get("RoutingProfileId")
@@ -182,6 +185,7 @@ def _build_agent_counts_fallback(client, instance_id):
                 counts[rp_id] = counts.get(rp_id, 0) + 1
         except ClientError:
             pass
+    print(file=sys.stderr)  # newline after bar completes
     return counts
 
 
