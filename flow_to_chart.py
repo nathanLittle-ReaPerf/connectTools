@@ -5,6 +5,8 @@ Accepts files produced by export_flow.py (envelope format) or raw flow content J
 Outputs Mermaid (default), self-contained HTML, or Graphviz DOT.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import re
