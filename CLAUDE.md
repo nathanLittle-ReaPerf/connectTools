@@ -52,6 +52,82 @@ python contact_inspect.py --instance-id <UUID> --contact-id <UUID> --profile my-
 
 ---
 
+### `lambda_tracer.py` — Trace Lambda Invocations
+
+Trace every Lambda function invoked during a contact's flow execution. Pulls Connect flow-execution logs to find Lambda invocations, then fetches the actual Lambda CloudWatch logs around each invocation timestamp.
+
+```bash
+# Human-readable trace with full Lambda logs
+python lambda_tracer.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
+
+# Show invocation metadata only (skip Lambda logs)
+python lambda_tracer.py --instance-id <UUID> --contact-id <UUID> --summary
+
+# Raw JSON output
+python lambda_tracer.py --instance-id <UUID> --contact-id <UUID> --json
+
+# Save to file
+python lambda_tracer.py --instance-id <UUID> --contact-id <UUID> --output trace.json
+```
+
+**APIs used:** `DescribeContact`, `DescribeInstance`, `FilterLogEvents` (Connect flow logs and Lambda log groups)
+
+**Required IAM:**
+- `connect:DescribeContact`
+- `connect:DescribeInstance`
+- `logs:FilterLogEvents` on Connect log group (`/aws/connect/<instance-alias>`)
+- `logs:FilterLogEvents` on each `/aws/lambda/<function-name>` log group
+
+**Key behaviors:**
+- `--summary` mode displays invocation metadata (ARN, timestamp, duration, response) without fetching Lambda logs — useful for quick overview
+- After `--summary` output, user can enter an invocation number to drill down and fetch full logs on demand
+- Lambda logs are fetched within ±30 seconds of the Connect-reported invocation timestamp
+- High-concurrency Lambda functions may have unrelated log lines in the ±30s window; all are shown
+- Log group is auto-discovered from instance alias (case-sensitive); override with `--log-group` if needed
+- All API failures degrade gracefully (missing sections are noted, not crashes)
+
+---
+
+### `routing_profile_audit.py` — Routing Profile Audit
+
+Audit routing profiles: list queue assignments per profile (channel, priority, delay) and agent counts. Flag anomalies: profiles with no agents, profiles with no queues, and queues not assigned to any profile.
+
+```bash
+# All profiles with queue assignments and agent counts
+python routing_profile_audit.py --instance-id <UUID> --region us-east-1
+
+# Filter to one profile by name substring
+python routing_profile_audit.py --instance-id <UUID> --name "Tier 2"
+
+# Export to CSV
+python routing_profile_audit.py --instance-id <UUID> --csv audit.csv
+
+# Raw JSON
+python routing_profile_audit.py --instance-id <UUID> --json | jq '.anomalies'
+```
+
+**APIs used:** `ListRoutingProfiles`, `ListRoutingProfileQueues`, `ListQueues`, `ListRoutingProfileUsers`, `ListUsers`, `DescribeUser`
+
+**Required IAM:**
+- `connect:ListRoutingProfiles`
+- `connect:ListRoutingProfileQueues`
+- `connect:ListQueues`
+- `connect:ListRoutingProfileUsers`
+- `connect:ListUsers`
+- `connect:DescribeUser` (fallback for older boto3 lacking ListRoutingProfileUsers)
+
+**Key behaviors:**
+- Builds agent-count map: uses `ListRoutingProfileUsers` if available; falls back to `ListUsers` + `DescribeUser` per user for older boto3 versions
+- Agent count fallback shows a progress bar (percentage-based) when describing users individually
+- Flags three types of anomalies:
+  - Profiles with no agents assigned
+  - Profiles with no queues assigned
+  - Queues not assigned to any routing profile
+- `--name` filter is case-insensitive substring match
+- CSV output includes: profile name, queue name, channel, priority, delay, agent count, and anomaly notes
+
+---
+
 ### `export_flow.py` — Export a Contact Flow by Name
 
 Export a contact flow's full JSON definition, identified by name. Useful for version-controlling flows, diffing changes, or migrating between instances.
@@ -194,3 +270,8 @@ All scripts follow the same conventions:
 - `boto3.Session(profile_name=profile)` to support optional `--profile`
 - Pagination handled inline in each fetcher function
 - `--json` output uses a `default=serial` handler that converts datetimes to ISO strings
+
+## CloudShell & Dependencies
+
+- **boto3 auto-upgrade:** `connectToolbox.py` checks boto3 version on startup. If < 1.35.0, it auto-upgrades via pip and restarts via `os.execv`. This is required for `ListRoutingProfileUsers` in `routing_profile_audit.py`. Graceful fallback: if `ListRoutingProfileUsers` is unavailable (older boto3), the tool falls back to `ListUsers` + `DescribeUser` per user, with a percentage-based progress bar.
+- **Python 3.8:** `str | None` union syntax not supported at runtime. Always add `from __future__ import annotations` at the top of every new tool.
