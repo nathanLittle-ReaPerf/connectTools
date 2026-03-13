@@ -90,11 +90,12 @@ def _ms(ts: dt.datetime) -> int:
 def filter_log_events(logs_client, log_group, filter_pattern, start_ms, end_ms):
     """Paginate FilterLogEvents; return list of raw event dicts. Returns [] on missing log group."""
     events, kwargs = [], {
-        "logGroupName":  log_group,
-        "filterPattern": filter_pattern,
-        "startTime":     start_ms,
-        "endTime":       end_ms,
+        "logGroupName": log_group,
+        "startTime":    start_ms,
+        "endTime":      end_ms,
     }
+    if filter_pattern:
+        kwargs["filterPattern"] = filter_pattern
     while True:
         try:
             resp = logs_client.filter_log_events(**kwargs)
