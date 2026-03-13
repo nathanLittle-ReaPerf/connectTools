@@ -325,7 +325,7 @@ python routing_profile_audit.py --instance-id <UUID> --name "Tier 2"
 python routing_profile_audit.py --instance-id <UUID> --csv audit.csv
 ```
 
-**Required IAM:** `connect:ListRoutingProfiles`, `connect:ListRoutingProfileQueues`, `connect:ListQueues`, `connect:ListUsers`
+**Required IAM:** `connect:ListRoutingProfiles`, `connect:ListRoutingProfileQueues`, `connect:ListQueues`, `connect:ListRoutingProfileUsers`
 
 ---
 

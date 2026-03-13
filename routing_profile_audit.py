@@ -123,26 +123,25 @@ def list_queues(client, instance_id):
     return queue_map
 
 
-def count_agents_per_rp(client, instance_id):
-    """Paginate ListUsers and return {rp_id: agent_count}."""
-    counts: dict[str, int] = {}
-    token = None
+def count_agents_for_rp(client, instance_id, rp_id):
+    """Return the number of users assigned to a routing profile via ListRoutingProfileUsers."""
+    count, token = 0, None
     while True:
-        kwargs = {"InstanceId": instance_id, "MaxResults": 100}
+        kwargs = {"InstanceId": instance_id, "RoutingProfileId": rp_id, "MaxResults": 100}
         if token:
             kwargs["NextToken"] = token
         try:
-            resp = client.list_users(**kwargs)
+            resp = client.list_routing_profile_users(**kwargs)
         except ClientError as e:
-            _fatal("ListUsers", e)
-        for u in resp.get("UserSummaryList", []):
-            rp_id = u.get("RoutingProfileId")
-            if rp_id:
-                counts[rp_id] = counts.get(rp_id, 0) + 1
+            code = e.response["Error"]["Code"]
+            print(f"  Warning: could not count agents for profile [{code}]: {e.response['Error']['Message']}",
+                  file=sys.stderr)
+            return 0
+        count += len(resp.get("UserSummaryList", []))
         token = resp.get("NextToken")
         if not token:
             break
-    return counts
+    return count
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -179,24 +178,21 @@ def build_report(client, instance_id, name_filter):
     print("  Loading queues...", file=sys.stderr)
     queue_map = list_queues(client, instance_id)  # {id: name}
 
-    print("  Counting agents per profile...", file=sys.stderr)
-    agent_counts = count_agents_per_rp(client, instance_id)
-
-    print("  Loading queue assignments...", file=sys.stderr)
+    print("  Loading queue assignments and agent counts...", file=sys.stderr)
     profile_data = []
     queues_in_any_rp: set = set()
     for p in profiles:
-        rp_id   = p["Id"]
-        queues  = list_routing_profile_queues(client, instance_id, rp_id)
-        # Resolve queue names from our map (API also returns names, but map is the source of truth)
+        rp_id  = p["Id"]
+        queues = list_routing_profile_queues(client, instance_id, rp_id)
         for q in queues:
             q["queue_name"] = queue_map.get(q["queue_id"], q["queue_name"])
             queues_in_any_rp.add(q["queue_id"])
+        agent_count = count_agents_for_rp(client, instance_id, rp_id)
         profile_data.append({
             "id":          rp_id,
             "name":        p["Name"],
             "arn":         p.get("Arn", ""),
-            "agent_count": agent_counts.get(rp_id, 0),
+            "agent_count": agent_count,
             "queues":      queues,
         })
 
