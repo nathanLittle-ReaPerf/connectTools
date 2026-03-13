@@ -46,6 +46,8 @@ examples:
                    help="Write JSON output to file (default: <contact-id>_lambda_trace.json)")
     p.add_argument("--json",        action="store_true", dest="output_json",
                    help="Print JSON to stdout instead of human-readable output")
+    p.add_argument("--summary",     action="store_true",
+                   help="Show invocation summary only — skip fetching Lambda log lines")
     return p.parse_args()
 
 
@@ -213,7 +215,7 @@ def _hr():
     print("  " + "─" * 64)
 
 
-def print_human(contact_id, invocations_with_logs):
+def print_human(contact_id, invocations_with_logs, show_logs=True):
     _hr()
     print(f"  LAMBDA TRACE   {contact_id}")
     _hr()
@@ -239,17 +241,17 @@ def print_human(contact_id, invocations_with_logs):
                 resp_str = resp_str[:117] + "..."
             print(f"       Response  : {resp_str}")
 
-        print(f"\n       Lambda logs (±{LAMBDA_WINDOW_SECS}s window):")
-        if logs:
-            for entry in logs:
-                ts  = entry["timestamp"][11:23]   # HH:MM:SS.mmm
-                msg = entry["message"]
-                # Trim very long lines
-                if len(msg) > 200:
-                    msg = msg[:197] + "..."
-                print(f"         {ts}  {msg}")
-        else:
-            print(f"         (no log events found — check IAM or log group /aws/lambda/{inv['function_name']})")
+        if show_logs:
+            print(f"\n       Lambda logs (±{LAMBDA_WINDOW_SECS}s window):")
+            if logs:
+                for entry in logs:
+                    ts  = entry["timestamp"][11:23]   # HH:MM:SS.mmm
+                    msg = entry["message"]
+                    if len(msg) > 200:
+                        msg = msg[:197] + "..."
+                    print(f"         {ts}  {msg}")
+            else:
+                print(f"         (no log events found — check IAM or log group /aws/lambda/{inv['function_name']})")
         print()
 
     _hr()
@@ -300,18 +302,21 @@ def main():
         sys.exit(0)
 
     invocations = extract_lambda_invocations(connect_events)
-    print(f"  Found {len(invocations)} Lambda invocation(s). Fetching Lambda logs...", file=sys.stderr)
 
-    # Fetch Lambda logs for each invocation; dedupe function names for status output
-    seen_functions: set = set()
-    invocations_with_logs = []
-    for inv in invocations:
-        fname = inv["function_name"]
-        if fname not in seen_functions:
-            seen_functions.add(fname)
-            print(f"    /aws/lambda/{fname}", file=sys.stderr)
-        lambda_logs = fetch_lambda_logs(logs_client, fname, inv["invoked_at"])
-        invocations_with_logs.append({"invocation": inv, "lambda_logs": lambda_logs})
+    if args.summary:
+        print(f"  Found {len(invocations)} Lambda invocation(s). Summary only.", file=sys.stderr)
+        invocations_with_logs = [{"invocation": inv, "lambda_logs": []} for inv in invocations]
+    else:
+        print(f"  Found {len(invocations)} Lambda invocation(s). Fetching Lambda logs...", file=sys.stderr)
+        seen_functions: set = set()
+        invocations_with_logs = []
+        for inv in invocations:
+            fname = inv["function_name"]
+            if fname not in seen_functions:
+                seen_functions.add(fname)
+                print(f"    /aws/lambda/{fname}", file=sys.stderr)
+            lambda_logs = fetch_lambda_logs(logs_client, fname, inv["invoked_at"])
+            invocations_with_logs.append({"invocation": inv, "lambda_logs": lambda_logs})
 
     # Output
     if args.output_json or args.output:
@@ -344,7 +349,7 @@ def main():
         else:
             print(out)
     else:
-        print_human(args.contact_id, invocations_with_logs)
+        print_human(args.contact_id, invocations_with_logs, show_logs=not args.summary)
 
 
 if __name__ == "__main__":

@@ -553,9 +553,12 @@ def tool_lambda_tracer():
         if ask_bool("Save log group for this instance?", default=True):
             ct_config.set_log_group(_cfg, iid, log_group)
 
+    summary = not ask_bool("Show full Lambda log lines?", default=True)
+
     args = connect_args(iid, region, profile) + ["--contact-id", cid]
     if log_group: args += ["--log-group", log_group]
     if output:    args += ["--output",    output]
+    if summary:   args += ["--summary"]
 
     _run("lambda_tracer.py", args)
 
