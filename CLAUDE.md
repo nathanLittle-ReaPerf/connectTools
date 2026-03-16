@@ -17,6 +17,51 @@ pip install python-dateutil openpyxl --user
 
 ---
 
+### `contact_timeline.py` — Contact Timeline
+
+Chronological event timeline for a single contact. Stitches together contact metadata milestones (from DescribeContact), every flow block execution (from CloudWatch flow logs), Lambda invocations, and optionally Contact Lens transcript turns into a single sorted view.
+
+```bash
+# Human-readable timeline
+python contact_timeline.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
+
+# Include Contact Lens transcript turns
+python contact_timeline.py --instance-id <UUID> --contact-id <UUID> --transcript
+
+# Raw JSON (pipe to jq)
+python contact_timeline.py --instance-id <UUID> --contact-id <UUID> --json | jq '.events[] | select(.kind=="LAMBDA")'
+
+# Save JSON to file
+python contact_timeline.py --instance-id <UUID> --contact-id <UUID> --output timeline.json
+```
+
+**APIs used:** `DescribeContact`, `DescribeInstance`, `DescribeQueue`, `DescribeUser`, `FilterLogEvents` (Connect flow log group), `ListRealtimeContactAnalysisSegmentsV2` (when `--transcript` or JSON output requested)
+
+**Required IAM:**
+- `connect:DescribeContact`
+- `connect:DescribeInstance`
+- `connect:DescribeQueue`
+- `connect:DescribeUser`
+- `logs:FilterLogEvents` on `/aws/connect/<instance-alias>`
+- `connect:ListRealtimeContactAnalysisSegments` (for `--transcript`)
+
+**Output columns:** `OFFSET` (T+MM:SS from contact start) · `KIND` · `EVENT` · `DETAIL`
+
+**Event kinds:**
+- `CONTACT` (bold) — metadata milestones: initiated, entered queue, agent connected, disconnected
+- `FLOW` — flow block executions: Play prompt, Get input, Check attribute, Set queue, etc.
+- `LAMBDA` (yellow) — Lambda invocations with result (Success/Error) and flow name
+- `LENS` (dim) — Contact Lens transcript turns with speaker role and sentiment; shown with `--transcript`
+
+**Key behaviors:**
+- Timestamps from the flow log message's own `Timestamp` field (preferred) with CW event timestamp as fallback
+- Lens transcript: uses `BeginOffsetMillis` for voice, `AbsoluteTime` for chat
+- Log group auto-discovered from instance alias; override with `--log-group`
+- Contact Lens only fetched when `--transcript`, `--json`, or `--output` is passed
+- If no flow logs found, timeline shows contact milestones only with a warning
+
+---
+
 ### `contact_diff.py` — Contact Diff
 
 Side-by-side comparison of two contacts in the same instance. Diffs core metadata, custom attributes, and Contact Lens outcome to answer "why did these two contacts behave differently?"

@@ -385,6 +385,12 @@ CONTACT_INSPECT_QUESTIONS = [
     {"label": "Include full transcript?", "arg": "--transcript", "type": "bool"},
 ]
 
+CONTACT_TIMELINE_QUESTIONS = [
+    {"label": "Contact ID", "arg": "--contact-id", "required": True},
+    {"label": "Include transcript turns?", "arg": "--transcript", "type": "bool"},
+    {"label": "Log group (leave blank to auto-discover)", "arg": "--log-group", "required": False},
+]
+
 CONTACT_DIFF_QUESTIONS = [
     {"label": "Contact ID A", "arg": "--contact-id-a", "required": True},
     {"label": "Contact ID B", "arg": "--contact-id-b", "required": True},
@@ -473,6 +479,13 @@ def tool_contacts_handled():
 
 def tool_contact_inspect():
     tool_runner("Contact Inspect", "contact_inspect.py", CONTACT_INSPECT_QUESTIONS)
+
+
+# ── Tool: Contact Timeline ────────────────────────────────────────────────────
+
+
+def tool_contact_timeline():
+    tool_runner("Contact Timeline", "contact_timeline.py", CONTACT_TIMELINE_QUESTIONS)
 
 
 # ── Tool: Contact Diff ────────────────────────────────────────────────────────
@@ -875,6 +888,7 @@ GROUPS = [
     ("Contacts", [
         ("Contacts Handled",   tool_contacts_handled,  "Sum CONTACTS_HANDLED across all queues for a month"),
         ("Contact Inspect",    tool_contact_inspect,   "Full deep-dive: attributes, Lens analysis, transfer chain"),
+        ("Contact Timeline",   tool_contact_timeline,  "Chronological flow blocks, Lambda calls, and contact milestones"),
         ("Contact Diff",       tool_contact_diff,      "Side-by-side diff of two contacts: core fields, attributes, and Lens"),
         ("Contact Search",     tool_contact_search,    "Search contacts by date, channel, agent, queue, or attribute"),
         ("Contact Recordings", tool_contact_recordings,"S3 locations and presigned URLs for recordings and transcripts"),
