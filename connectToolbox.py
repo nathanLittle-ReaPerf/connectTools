@@ -390,12 +390,15 @@ _LAMBDA_ERRORS_PERIODS = ["today", "yesterday", "this-week", "last-week",
 
 def tool_lambda_errors():
     _header("Lambda Error Aggregator")
-    iid, region, profile = ask_connect_defaults()
-    fn = ask("Lambda function name or ARN fragment")
+    region  = ask("Region",           default=_get_default("region"))
+    profile = ask("Profile (optional)", required=False)
+    fn = ask("Lambda function name or ARN (required)")
 
     period_choice = ask_choice("Time window", _LAMBDA_ERRORS_PERIODS, default="yesterday")
 
-    args = connect_args(iid, region, profile) + ["--function", fn]
+    args = ["--function", fn]
+    if region:  args += ["--region",  region]
+    if profile: args += ["--profile", profile]
 
     if period_choice == "custom":
         last = ask("Duration (e.g. 4h, 7d) or leave blank for --start/--end", required=False)

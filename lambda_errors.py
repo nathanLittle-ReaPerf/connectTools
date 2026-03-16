@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""lambda_errors.py — Aggregate Lambda errors across contacts for a given function.
+"""lambda_errors.py — Aggregate Lambda errors from CloudWatch Logs.
 
-Scans Connect flow logs over a time window, finds every invocation of the
-specified Lambda function, and groups results by error type — showing which
-contacts were affected and how many.
+Searches /aws/lambda/<function-name> for error events over a time window,
+classifies them by error type, and groups occurrences — useful for spotting
+patterns in Lambda failures that affect Amazon Connect contacts.
 """
 
 from __future__ import annotations
@@ -20,30 +20,36 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-RETRY_CONFIG         = Config(retries={"max_attempts": 5, "mode": "adaptive"})
-_LAMBDA_MODULE_TYPES = {"InvokeExternalResource", "InvokeLambdaFunction"}
-_MAX_DISPLAY         = 15   # max contact IDs shown per error group in human output
+RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
+_MAX_DISPLAY = 15   # max occurrences shown per error type in human output
+
+# CloudWatch filter to catch error-level Lambda log lines
+_LAMBDA_ERROR_FILTER = '?ERROR ?"Task timed out" ?"errorType" ?"Traceback" ?"Exception"'
+
+# Regexes for parsing
+_UUID_RE      = re.compile(r'\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b')
+_EXC_RE       = re.compile(r'([A-Za-z][A-Za-z0-9_]*(?:Exception|Error|Fault))[:\s]')
 
 _MAN = """\
 NAME
-    lambda_errors.py — Aggregate Lambda errors across contacts for a given function
+    lambda_errors.py — Aggregate Lambda errors from CloudWatch Logs
 
 SYNOPSIS
-    python lambda_errors.py --instance-id UUID --function NAME [OPTIONS]
+    python lambda_errors.py --function NAME [OPTIONS]
 
 DESCRIPTION
-    Scans Connect flow-execution logs in CloudWatch over a time window, finds every
-    invocation of the specified Lambda function (matched by name or ARN fragment),
-    and groups results by error type. Shows which contacts were affected, how many
-    errors occurred per type, and the success rate. Use --csv for a per-invocation
-    export or --json for machine-readable aggregated output.
+    Searches the Lambda function's CloudWatch log group (/aws/lambda/<name>)
+    for error events over a time window, classifies them by error type, and
+    groups occurrences. Useful for spotting error patterns in Lambda functions
+    invoked by Amazon Connect flows.
+
+    The function argument can be a function name, a name fragment, or a full ARN.
+    The function name is extracted from an ARN automatically.
 
 OPTIONS
-    --instance-id UUID
-        Amazon Connect instance UUID. Required.
-
     --function NAME
-        Lambda function name or ARN fragment to match (case-insensitive substring). Required.
+        Lambda function name, name fragment, or full ARN. Required.
+        Used to derive the log group: /aws/lambda/<function-name>.
 
     --region REGION
         AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
@@ -52,8 +58,7 @@ OPTIONS
         AWS named profile for local development.
 
     --log-group NAME
-        Override the auto-discovered Connect CloudWatch log group.
-        Default: /aws/connect/<instance-alias>.
+        Override the auto-derived Lambda log group.
 
     --period PERIOD
         Named time period shortcut. Choices:
@@ -65,75 +70,67 @@ OPTIONS
         Mutually exclusive with --period and --start.
 
     --start YYYY-MM-DD[THH:MM:SS]
-        Absolute window start. Requires --end (defaults to now if omitted).
-        Mutually exclusive with --period and --last.
+        Absolute window start. Mutually exclusive with --period and --last.
 
     --end YYYY-MM-DD[THH:MM:SS]
         Absolute window end. Default: now. Used with --start.
 
     --json
-        Emit raw JSON with summary and full invocation list.
+        Emit raw JSON with summary and full error list.
 
     --csv FILE
-        Write per-invocation CSV to a file.
+        Write per-error CSV to a file.
 
 EXAMPLES
-    # Errors for the last 24 hours (default window)
-    python lambda_errors.py --instance-id <UUID> --function my-auth-function --region us-east-1
+    # Errors for today (default window)
+    python lambda_errors.py --function my-connect-lambda --region us-east-1
 
-    # Yesterday's errors
-    python lambda_errors.py --instance-id <UUID> --function my-auth-function --period yesterday
+    # Yesterday's errors using a full ARN
+    python lambda_errors.py \\
+        --function arn:aws:lambda:us-east-1:123456789012:function:my-fn \\
+        --period yesterday
 
-    # Last week
-    python lambda_errors.py --instance-id <UUID> --function my-auth-function --period last-week
+    # Last 4 hours
+    python lambda_errors.py --function my-connect-lambda --last 4h
 
-    # Custom relative window
-    python lambda_errors.py --instance-id <UUID> --function my-auth-function --last 4h
-
-    # Absolute date range, export CSV
-    python lambda_errors.py --instance-id <UUID> --function my-auth-function \\
+    # Custom date range, export CSV
+    python lambda_errors.py --function my-connect-lambda \\
         --start 2026-03-15 --end 2026-03-16 --csv errors.csv
 
     # JSON output
-    python lambda_errors.py --instance-id <UUID> --function my-auth-function \\
-        --json | jq '.errors'
+    python lambda_errors.py --function my-connect-lambda --json | jq '.by_type'
 
 IAM PERMISSIONS
-    connect:DescribeInstance
-    logs:FilterLogEvents (on /aws/connect/<instance-alias>)
+    logs:FilterLogEvents (on /aws/lambda/<function-name>)
 
 NOTES
-    The function filter is a case-insensitive substring match against the full
-    Lambda ARN. Up to 15 contact IDs are shown per error type in human output;
-    use --csv or --json to see all. The default time window is the last 24 hours
-    if no period, --last, or --start flag is given.
+    The default time window is the last 24 hours if no period, --last, or
+    --start flag is given. Up to 15 occurrences are shown per error type in
+    human output; use --csv or --json to see all.
 """
 
 
-# ── Argument parsing ──────────────────────────────────────────────────────────
+# ── Argument parsing ───────────────────────────────────────────────────────────
 
 def parse_args():
     p = argparse.ArgumentParser(
-        description="Aggregate Lambda invocation errors across contacts for a given function.",
+        description="Aggregate Lambda errors from CloudWatch Logs.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 examples:
-  %(prog)s --instance-id <UUID> --function my-auth-function --region us-east-1
-  %(prog)s --instance-id <UUID> --function my-auth-function --period yesterday
-  %(prog)s --instance-id <UUID> --function my-auth-function --period last-week
-  %(prog)s --instance-id <UUID> --function my-auth-function --last 4h
-  %(prog)s --instance-id <UUID> --function my-auth-function --start 2026-03-15 --end 2026-03-16
-  %(prog)s --instance-id <UUID> --function my-auth-function --csv errors.csv
-  %(prog)s --instance-id <UUID> --function my-auth-function --json | jq '.errors'
+  %(prog)s --function my-connect-lambda --region us-east-1
+  %(prog)s --function my-connect-lambda --period yesterday
+  %(prog)s --function arn:aws:lambda:us-east-1:123:function:my-fn --period last-week
+  %(prog)s --function my-connect-lambda --last 4h
+  %(prog)s --function my-connect-lambda --start 2026-03-15 --end 2026-03-16
         """,
     )
-    p.add_argument("--instance-id", required=True, metavar="UUID")
-    p.add_argument("--function",    required=True, metavar="NAME",
-                   help="Lambda function name or ARN fragment to match")
+    p.add_argument("--function",  required=True, metavar="NAME",
+                   help="Lambda function name, fragment, or full ARN")
     p.add_argument("--region",    default=None,  help="AWS region")
     p.add_argument("--profile",   default=None,  help="AWS named profile")
     p.add_argument("--log-group", default=None,  metavar="NAME",
-                   help="Override auto-discovered Connect log group")
+                   help="Override auto-derived Lambda log group")
     # Time window — mutually exclusive
     tg = p.add_mutually_exclusive_group()
     tg.add_argument("--period", default=None,
@@ -150,11 +147,11 @@ examples:
     p.add_argument("--json", action="store_true", dest="output_json",
                    help="Emit raw JSON (pipe-friendly)")
     p.add_argument("--csv",  default=None, metavar="FILE",
-                   help="Write per-invocation CSV to file")
+                   help="Write per-error CSV to file")
     return p.parse_args()
 
 
-# ── Duration parser ───────────────────────────────────────────────────────────
+# ── Duration / window parsing ──────────────────────────────────────────────────
 
 def parse_duration(s: str) -> dt.timedelta:
     m = re.fullmatch(r"(\d+)([smhd])", s.lower().strip())
@@ -184,11 +181,10 @@ def _named_period(period: str) -> tuple:
         start = dt.datetime(d.year, d.month, d.day, tzinfo=dt.timezone.utc)
         return start, now
     if period == "last-week":
-        d     = today - dt.timedelta(days=today.weekday())  # this Monday
-        end_d = d
+        d       = today - dt.timedelta(days=today.weekday())  # this Monday
         start_d = d - dt.timedelta(weeks=1)
         return (dt.datetime(start_d.year, start_d.month, start_d.day, tzinfo=dt.timezone.utc),
-                dt.datetime(end_d.year,   end_d.month,   end_d.day,   tzinfo=dt.timezone.utc))
+                dt.datetime(d.year,       d.month,       d.day,       tzinfo=dt.timezone.utc))
     if period == "this-month":
         start = dt.datetime(today.year, today.month, 1, tzinfo=dt.timezone.utc)
         return start, now
@@ -228,52 +224,55 @@ def parse_window(args) -> tuple:
             end = now
         return start, end
 
-    # --last or default 24h
     delta = parse_duration(args.last or "24h")
     return now - delta, now
 
 
-# ── Client factory ────────────────────────────────────────────────────────────
+# ── Client factory ─────────────────────────────────────────────────────────────
 
-def make_clients(region, profile):
+def make_client(region, profile):
     session  = boto3.Session(profile_name=profile)
     resolved = region or session.region_name
     if not resolved:
         print("Error: could not determine AWS region. Pass --region explicitly.", file=sys.stderr)
         sys.exit(1)
-    connect = session.client("connect", region_name=resolved, config=RETRY_CONFIG)
-    logs    = session.client("logs",    region_name=resolved, config=RETRY_CONFIG)
-    return connect, logs
+    return session.client("logs", region_name=resolved, config=RETRY_CONFIG)
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _ms(ts: dt.datetime) -> int:
     return int(ts.timestamp() * 1000)
 
 
-def fetch_instance_alias(connect, instance_id):
-    try:
-        return connect.describe_instance(InstanceId=instance_id)["Instance"]["InstanceAlias"]
-    except ClientError:
-        return None
+def extract_function_name(fn_arg: str) -> str:
+    """Return bare function name from a full ARN or return the arg unchanged."""
+    if fn_arg.startswith("arn:aws"):
+        # arn:aws:lambda:region:account:function:name[:qualifier]
+        parts = fn_arg.split(":")
+        if len(parts) >= 7:
+            return parts[6]
+    return fn_arg
 
 
 def filter_log_events(logs_client, log_group, filter_pattern, start_ms, end_ms):
     events = []
     kwargs = {
-        "logGroupName":  log_group,
-        "filterPattern": filter_pattern,
-        "startTime":     start_ms,
-        "endTime":       end_ms,
+        "logGroupName": log_group,
+        "startTime":    start_ms,
+        "endTime":      end_ms,
     }
+    if filter_pattern:
+        kwargs["filterPattern"] = filter_pattern
     while True:
         try:
             resp = logs_client.filter_log_events(**kwargs)
         except ClientError as e:
             code = e.response["Error"]["Code"]
             if code == "ResourceNotFoundException":
-                print(f"Error: log group {log_group!r} not found.", file=sys.stderr)
+                print(f"Error: log group {log_group!r} not found.\n"
+                      f"       Confirm the function name and that it has been invoked at least once.",
+                      file=sys.stderr)
                 sys.exit(1)
             print(f"Error querying logs [{code}]: {e.response['Error']['Message']}", file=sys.stderr)
             sys.exit(1)
@@ -285,183 +284,123 @@ def filter_log_events(logs_client, log_group, filter_pattern, start_ms, end_ms):
     return events
 
 
-def parse_message(raw: str) -> dict:
-    try:
-        return json.loads(raw.strip())
-    except (json.JSONDecodeError, ValueError):
-        return {}
+# ── Lambda log parsing ─────────────────────────────────────────────────────────
+
+def _extract_request_id(line: str) -> str | None:
+    m = _UUID_RE.search(line)
+    return m.group(1) if m else None
 
 
-# ── Log parsing ───────────────────────────────────────────────────────────────
+def _classify_error(line: str) -> tuple:
+    """Return (error_type, message) for a Lambda log line."""
+    stripped = line.strip()
 
-def _event_ts(msg: dict, cw_ts_ms: int) -> dt.datetime:
-    ts_str = msg.get("Timestamp")
-    if ts_str:
+    # Lambda timeout
+    if "Task timed out" in line:
+        return "Timeout", stripped[:200]
+
+    # Lambda JSON error response (unhandled exception)
+    if stripped.startswith("{") and "errorType" in stripped:
         try:
-            return dt.datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-        except ValueError:
+            obj = json.loads(stripped)
+            return obj.get("errorType", "Error"), obj.get("errorMessage", stripped[:200])
+        except (json.JSONDecodeError, ValueError):
             pass
-    return dt.datetime.fromtimestamp(cw_ts_ms / 1000, tz=dt.timezone.utc)
+
+    # Exception class names in the log line
+    m = _EXC_RE.search(line)
+    if m:
+        return m.group(1), stripped[:200]
+
+    # Generic fallback
+    return "Error", stripped[:200]
 
 
-def parse_invocations(cw_events: list, fn_match: str) -> list:
+def parse_lambda_errors(cw_events: list) -> list:
     """
-    Extract every Lambda invocation for the target function from Connect flow logs.
+    Parse raw CloudWatch log events from a Lambda log group into error records.
 
     Returns list of dicts:
-      {
-        "contact_id":    str,
-        "timestamp":     datetime,
-        "function_arn":  str,
-        "function_name": str,
-        "flow_name":     str,
-        "result":        "Success" | "Error" | "Unknown",
-        "error_type":    str | None,   # None for successes
-      }
+      { timestamp, request_id, error_type, message }
     """
-    fn_match_lower = fn_match.lower()
     results = []
-
     for ev in cw_events:
-        msg = parse_message(ev["message"])
-        if not msg:
-            continue
-        if msg.get("ContactFlowModuleType") not in _LAMBDA_MODULE_TYPES:
-            continue
+        line    = ev["message"]
+        ts      = dt.datetime.fromtimestamp(ev["timestamp"] / 1000, tz=dt.timezone.utc)
+        stripped = line.strip()
 
-        params = msg.get("Parameters", {})
-        arn    = params.get("FunctionArn") or params.get("LambdaFunctionARN") or ""
-        if not arn:
+        # Skip Lambda platform lines — they are not errors
+        if stripped.startswith(("START RequestId:", "END RequestId:", "REPORT RequestId:")):
             continue
 
-        # Filter to the target function
-        if fn_match_lower not in arn.lower():
-            continue
-
-        fn_name    = arn.split(":")[-1] if ":" in arn else arn
-        contact_id = msg.get("ContactId") or msg.get("ContactFlowId") or ""
-        ts         = _event_ts(msg, ev["timestamp"])
-        flow_name  = msg.get("ContactFlowName") or ""
-
-        external   = msg.get("ExternalResults") or msg.get("ExternalResult")
-        error_type = msg.get("Error") or None
-
-        if external:
-            result     = "Success"
-            error_type = None
-        elif error_type:
-            result = "Error"
-        else:
-            result     = "Unknown"
-            error_type = "Unknown"
-
+        error_type, message = _classify_error(line)
         results.append({
-            "contact_id":   contact_id,
-            "timestamp":    ts,
-            "function_arn": arn,
-            "function_name": fn_name,
-            "flow_name":    flow_name,
-            "result":       result,
-            "error_type":   error_type,
+            "timestamp":  ts,
+            "request_id": _extract_request_id(line),
+            "error_type": error_type,
+            "message":    message,
         })
 
     return results
 
 
-# ── Aggregation ───────────────────────────────────────────────────────────────
+# ── Aggregation ────────────────────────────────────────────────────────────────
 
-def aggregate(invocations: list) -> dict:
-    """
-    Returns:
-      {
-        "total":    int,
-        "success":  int,
-        "error":    int,
-        "unknown":  int,
-        "by_error": {error_type: [invocation, ...]},   # errors only, sorted by count desc
-      }
-    """
-    by_error: dict = defaultdict(list)
-    success = error = unknown = 0
+def aggregate(errors: list) -> dict:
+    by_type: dict = defaultdict(list)
+    for err in errors:
+        by_type[err["error_type"]].append(err)
 
-    for inv in invocations:
-        if inv["result"] == "Success":
-            success += 1
-        elif inv["result"] == "Error":
-            error += 1
-            by_error[inv["error_type"]].append(inv)
-        else:
-            unknown += 1
-            by_error["Unknown"].append(inv)
-
-    # Sort by count desc
-    sorted_errors = dict(
-        sorted(by_error.items(), key=lambda kv: len(kv[1]), reverse=True)
+    sorted_by_type = dict(
+        sorted(by_type.items(), key=lambda kv: len(kv[1]), reverse=True)
     )
-
-    return {
-        "total":    len(invocations),
-        "success":  success,
-        "error":    error + unknown,
-        "unknown":  unknown,
-        "by_error": sorted_errors,
-    }
+    return {"total": len(errors), "by_type": sorted_by_type}
 
 
-# ── Human-readable output ─────────────────────────────────────────────────────
+# ── Human-readable output ──────────────────────────────────────────────────────
 
 def _hr():
     print("  " + "─" * 68)
 
 
-def _pct(n, total):
-    return f"{n / total * 100:.1f}%" if total else "—"
-
-
-def print_human(fn_name, agg, start_dt, end_dt, log_group, fn_match):
-    total   = agg["total"]
-    success = agg["success"]
-    errors  = agg["error"]
+def print_human(fn_name, agg, start_dt, end_dt, log_group):
+    total = agg["total"]
 
     _hr()
     print(f"  LAMBDA ERROR REPORT   {fn_name}")
     _hr()
     print(f"  Window   : {start_dt.strftime('%Y-%m-%d %H:%M')} UTC"
           f"  →  {end_dt.strftime('%Y-%m-%d %H:%M')} UTC")
-    print(f"  Filter   : {fn_match!r}")
     print(f"  Log group: {log_group}\n")
 
     if total == 0:
-        print("  No invocations found in this window.")
+        print("  No errors found in this window.")
         _hr()
         print()
         return
 
-    print(f"  Invocations : {total}")
-    print(f"  Successes   : {success}  ({_pct(success, total)})")
-    print(f"  Errors      : {errors}  ({_pct(errors, total)})")
-    print(f"  Error types : {len(agg['by_error'])}")
-
-    if not agg["by_error"]:
-        print("\n  No errors found.")
-        _hr()
-        print()
-        return
+    print(f"  Error events : {total}")
+    print(f"  Error types  : {len(agg['by_type'])}")
 
     print()
     _hr()
     print("  ERRORS BY TYPE")
     _hr()
 
-    for error_type, invs in agg["by_error"].items():
-        count = len(invs)
-        print(f"\n  {error_type}  ({count} occurrence(s), {_pct(count, errors)} of errors)")
-        shown = invs[:_MAX_DISPLAY]
-        for inv in shown:
-            ts_str   = inv["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
-            cid      = inv["contact_id"] or "(unknown)"
-            flow_str = f"  [{inv['flow_name']}]" if inv["flow_name"] else ""
-            print(f"    {ts_str} UTC   {cid}{flow_str}")
+    for error_type, errs in agg["by_type"].items():
+        count = len(errs)
+        print(f"\n  {error_type}  ({count} occurrence(s))")
+        shown = errs[:_MAX_DISPLAY]
+        for err in shown:
+            ts_str = err["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+            rid    = f"  [{err['request_id'][:8]}…]" if err.get("request_id") else ""
+            msg    = err.get("message", "")
+            # Trim long messages for display
+            if len(msg) > 100:
+                msg = msg[:99] + "…"
+            print(f"    {ts_str} UTC{rid}")
+            if msg and msg != err.get("error_type"):
+                print(f"      \033[90m{msg}\033[0m")
         if count > _MAX_DISPLAY:
             print(f"    \033[90m… {count - _MAX_DISPLAY} more — use --csv or --json for full list\033[0m")
 
@@ -469,103 +408,79 @@ def print_human(fn_name, agg, start_dt, end_dt, log_group, fn_match):
     print()
 
 
-# ── CSV output ────────────────────────────────────────────────────────────────
+# ── CSV output ─────────────────────────────────────────────────────────────────
 
-def write_csv(invocations: list, path: str):
-    fields = ["timestamp", "contact_id", "function_name", "function_arn",
-              "flow_name", "result", "error_type"]
+def write_csv(errors: list, path: str):
+    fields = ["timestamp", "request_id", "error_type", "message"]
     with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         w.writeheader()
-        for inv in invocations:
-            row = dict(inv)
-            row["timestamp"] = inv["timestamp"].isoformat()
+        for err in errors:
+            row = dict(err)
+            row["timestamp"] = err["timestamp"].isoformat()
             w.writerow(row)
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
     if "--man" in sys.argv:
         print(_MAN)
         sys.exit(0)
     args = parse_args()
-    connect, logs_client = make_clients(args.region, args.profile)
+    logs_client          = make_client(args.region, args.profile)
     start_dt, end_dt     = parse_window(args)
 
-    # Resolve log group
-    log_group = args.log_group
-    if not log_group:
-        alias = fetch_instance_alias(connect, args.instance_id)
-        if alias:
-            log_group = f"/aws/connect/{alias}"
-        else:
-            print(
-                "Error: could not auto-discover Connect log group.\n"
-                "Pass --log-group /aws/connect/<your-instance-alias> explicitly.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
+    # Derive log group from function name
+    fn_name   = extract_function_name(args.function)
+    log_group = args.log_group or f"/aws/lambda/{fn_name}"
 
     print(f"  Log group : {log_group}", file=sys.stderr)
     print(f"  Window    : {start_dt.strftime('%Y-%m-%d %H:%M')} UTC"
           f"  →  {end_dt.strftime('%Y-%m-%d %H:%M')} UTC", file=sys.stderr)
-    print(f"  Fetching flow logs matching {args.function!r}...", file=sys.stderr)
+    print(f"  Fetching Lambda error logs...", file=sys.stderr)
 
-    cw_events   = filter_log_events(
-        logs_client, log_group, f'"{args.function}"', _ms(start_dt), _ms(end_dt),
+    cw_events = filter_log_events(
+        logs_client, log_group, _LAMBDA_ERROR_FILTER, _ms(start_dt), _ms(end_dt),
     )
-    print(f"  {len(cw_events)} log event(s) found. Parsing...", file=sys.stderr)
+    print(f"  {len(cw_events)} matching log event(s). Parsing...", file=sys.stderr)
 
-    invocations = parse_invocations(cw_events, args.function)
-    agg         = aggregate(invocations)
-
-    # Derive display name from the first matching invocation's function_name
-    fn_names = list({inv["function_name"] for inv in invocations if inv["function_name"]})
-    fn_name  = fn_names[0] if len(fn_names) == 1 else args.function
+    errors = parse_lambda_errors(cw_events)
+    agg    = aggregate(errors)
 
     if args.output_json:
         def serial(o):
             return o.isoformat() if hasattr(o, "isoformat") else str(o)
 
         doc = {
-            "function":    fn_name,
-            "fn_match":    args.function,
-            "log_group":   log_group,
+            "function":  fn_name,
+            "log_group": log_group,
             "window": {
                 "start": start_dt.isoformat(),
                 "end":   end_dt.isoformat(),
             },
             "summary": {
-                "total":    agg["total"],
-                "success":  agg["success"],
-                "errors":   agg["error"],
+                "total":       agg["total"],
+                "error_types": len(agg["by_type"]),
             },
-            "errors": {
+            "by_type": {
                 etype: [
                     {
-                        "contact_id":    inv["contact_id"],
-                        "timestamp":     inv["timestamp"].isoformat(),
-                        "function_name": inv["function_name"],
-                        "flow_name":     inv["flow_name"],
+                        "timestamp":  err["timestamp"].isoformat(),
+                        "request_id": err.get("request_id"),
+                        "message":    err.get("message"),
                     }
-                    for inv in invs
+                    for err in errs
                 ]
-                for etype, invs in agg["by_error"].items()
+                for etype, errs in agg["by_type"].items()
             },
-            "invocations": [
-                {k: v.isoformat() if hasattr(v, "isoformat") else v
-                 for k, v in inv.items()}
-                for inv in invocations
-            ],
         }
         print(json.dumps(doc, indent=2, default=serial))
-
     else:
-        print_human(fn_name, agg, start_dt, end_dt, log_group, args.function)
+        print_human(fn_name, agg, start_dt, end_dt, log_group)
 
     if args.csv:
-        write_csv(invocations, args.csv)
+        write_csv(errors, args.csv)
         print(f"  Saved → {args.csv}", file=sys.stderr)
 
 
