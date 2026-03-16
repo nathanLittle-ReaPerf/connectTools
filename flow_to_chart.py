@@ -794,11 +794,12 @@ def main():
     args = parse_args()
 
     # Load file
+    flow_path = Path(args.flow_file).expanduser()
     try:
-        with open(args.flow_file, encoding="utf-8") as f:
+        with open(flow_path, encoding="utf-8") as f:
             exported = json.load(f)
     except FileNotFoundError:
-        print(f"Error: file not found: {args.flow_file}", file=sys.stderr)
+        print(f"Error: file not found: {flow_path}", file=sys.stderr)
         sys.exit(1)
     except json.JSONDecodeError as e:
         print(f"Error: invalid JSON in {args.flow_file}: {e}", file=sys.stderr)
@@ -807,10 +808,10 @@ def main():
     # Accept both our envelope format {"metadata":..., "content":...} and raw flow JSON
     if "content" in exported and "Actions" in (exported.get("content") or {}):
         content   = exported["content"]
-        flow_name = (exported.get("metadata") or {}).get("name") or Path(args.flow_file).stem
+        flow_name = (exported.get("metadata") or {}).get("name") or flow_path.stem
     elif "Actions" in exported:
         content   = exported
-        flow_name = Path(args.flow_file).stem
+        flow_name = flow_path.stem
     else:
         print(
             "Error: file does not look like a contact flow "

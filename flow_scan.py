@@ -14,6 +14,7 @@ import argparse
 import json
 import re
 import sys
+from pathlib import Path
 from typing import NamedTuple
 
 import boto3
@@ -286,11 +287,12 @@ def _block_label(identifier: str, block_type: str) -> str:
 
 def load_content_from_file(path: str) -> tuple:
     """Load a flow JSON file. Returns (flow_name, content_dict)."""
+    resolved = Path(path).expanduser()
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(resolved, encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
-        print(f"Error: file not found: {path}", file=sys.stderr)
+        print(f"Error: file not found: {resolved}", file=sys.stderr)
         sys.exit(1)
     except json.JSONDecodeError as e:
         print(f"Error: invalid JSON in {path}: {e}", file=sys.stderr)
