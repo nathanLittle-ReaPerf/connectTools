@@ -233,6 +233,7 @@ def fetch_lens_voice(connect, instance_id, contact_id):
     while True:
         kwargs = dict(
             InstanceId=instance_id, ContactId=contact_id,
+            OutputType="Raw",
             SegmentTypes=["TRANSCRIPT", "CATEGORIES", "ISSUES", "SENTIMENT"],
         )
         if token:
@@ -252,6 +253,7 @@ def fetch_lens_chat(connect, instance_id, contact_id):
     while True:
         kwargs = dict(
             InstanceId=instance_id, ContactId=contact_id,
+            OutputType="Raw",
             SegmentTypes=["TRANSCRIPT", "CATEGORIES", "ISSUES",
                           "EVENT", "ATTACHMENTS", "POST_CONTACT_SUMMARY"],
         )
