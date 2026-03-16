@@ -49,12 +49,12 @@ python phone_numbers.py --instance-id <UUID> --json | jq '.[] | select(.flow == 
   ────────────────────────────────────────────────────────────────────────
   PHONE NUMBERS   dbff2776-6bba-4071-98dc-03c16bf2e6de
   ────────────────────────────────────────────────────────────────────────
-  12 number(s)  ·  1 unassigned
+  12 number(s)  ·  1 unassigned  ·  8 legacy (flow not in API)
 
   NUMBER          TYPE        COUNTRY  FLOW
   ─────────────   ─────────   ───────  ────────────────────────────────
   +14165550001    DID         CA       Main IVR
-  +14165550002    DID         CA       Sales IVR
+  +14165550002    DID         CA       (legacy config)
   +18005550100    TOLL_FREE   US       Support IVR
   +14165559999    DID         CA       (unassigned)
 ```
@@ -66,9 +66,13 @@ python phone_numbers.py --instance-id <UUID> --json | jq '.[] | select(.flow == 
 ## Key Behaviours
 
 - **Snapshot-first resolution** — if an instance snapshot exists (from `instance_snapshot.py`), flow names are resolved offline with no extra API calls. Without a snapshot, one `DescribeContactFlow` call is made per unique flow ARN (results cached within the run).
-- **Unassigned detection** — numbers with no `TargetArn` are shown as `(unassigned)` in the table and have `flow: null` in JSON/CSV.
+- **Unassigned vs legacy** — `ListPhoneNumbersV2` `TargetArn` reflects the claiming entity, not the contact flow:
+  - `null` / empty → truly unassigned, shown as `(unassigned)`
+  - Instance or TDG ARN (no `/contact-flow/` in path) → number was configured via the old Connect console UI; the contact flow association is not exposed by the API → shown as `(legacy config)` in yellow
+  - Contact-flow ARN → resolved to the flow name
+- **`--unassigned` filter** — matches only numbers with no `TargetArn` (null). Legacy-configured numbers are excluded from this filter since they do have a flow — it's just not available via the API.
+- **`--flow` filter** — excludes legacy numbers (only matches resolved flow names).
 - **Status flagging** — numbers not in `CLAIMED` state (e.g. `IN_PROGRESS`, `FAILED`) are highlighted in yellow.
-- **Filters are mutually useful** — `--flow` and `--unassigned` are separate flags; use one or neither to see all numbers.
 - **Sorted output** — numbers are sorted alphabetically by phone number string.
 
 ## Required IAM Permissions

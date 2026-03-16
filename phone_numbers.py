@@ -142,12 +142,26 @@ def fetch_phone_numbers(client, instance_id) -> list:
             return items
 
 
+_LEGACY = "(legacy config)"   # number claimed but flow not exposed via API
+
+
 def resolve_flow_name(client, instance_id, target_arn, cache, snapshot) -> str | None:
-    """Resolve a TargetArn to a contact flow name."""
+    """Resolve a TargetArn to a contact flow name.
+
+    ListPhoneNumbersV2 TargetArn semantics:
+      - null/empty          → truly unassigned (return None)
+      - contains "/contact-flow/" → new-style association, resolve to flow name
+      - anything else (instance or TDG ARN) → legacy config, flow not in API
+    """
     if not target_arn:
         return None
     if target_arn in cache:
         return cache[target_arn]
+
+    # Legacy-configured numbers: TargetArn is instance or TDG ARN, not a flow.
+    if "/contact-flow/" not in target_arn:
+        cache[target_arn] = _LEGACY
+        return _LEGACY
 
     # Try snapshot first
     if snapshot:
@@ -174,25 +188,41 @@ def _hr():
     print("  " + "─" * 72)
 
 
+def _flow_display(flow: str | None) -> str:
+    """Return a coloured display string for the flow column."""
+    if not flow:
+        return "\033[90m(unassigned)\033[0m"
+    if flow == _LEGACY:
+        return "\033[33m(legacy config)\033[0m"
+    return flow
+
+
 def print_human(rows, instance_id):
     total      = len(rows)
     unassigned = sum(1 for r in rows if not r["flow"])
+    legacy     = sum(1 for r in rows if r["flow"] == _LEGACY)
 
     _hr()
     print(f"  PHONE NUMBERS   {instance_id}")
     _hr()
-    print(f"  {total} number(s)  ·  {unassigned} unassigned\n")
+    summary = f"  {total} number(s)  ·  {unassigned} unassigned"
+    if legacy:
+        summary += f"  ·  {legacy} legacy (flow not in API)"
+    print(summary + "\n")
 
-    # Column widths
+    # Column widths — use plain text length for alignment (strip ANSI from display)
+    def _plain(r):
+        return r["flow"] if (r["flow"] and r["flow"] != _LEGACY) else "(legacy config)" if r["flow"] == _LEGACY else "(unassigned)"
+
     num_w  = max((len(r["number"]) for r in rows), default=12)
-    flow_w = max((len(r["flow"] or "(unassigned)") for r in rows), default=16)
+    flow_w = max((len(_plain(r)) for r in rows), default=16)
     flow_w = max(flow_w, 16)
 
     print(f"  {'NUMBER':<{num_w}}  {'TYPE':<10}  {'COUNTRY':<7}  {'FLOW'}")
     print(f"  {'─'*num_w}  {'─'*10}  {'─'*7}  {'─'*flow_w}")
 
     for r in rows:
-        flow_label = r["flow"] or "\033[90m(unassigned)\033[0m"
+        flow_label = _flow_display(r["flow"])
         status_str = f"  \033[33m[{r['status']}]\033[0m" if r["status"] != "CLAIMED" else ""
         print(f"  {r['number']:<{num_w}}  {r['type']:<10}  {r['country']:<7}  {flow_label}{status_str}")
 
@@ -252,10 +282,11 @@ def main():
 
     # Apply filters
     if args.unassigned:
-        rows = [r for r in rows if not r["flow"]]
+        rows = [r for r in rows if not r["flow"]]   # null only, not legacy
     elif args.flow:
         needle = args.flow.lower()
-        rows   = [r for r in rows if r["flow"] and needle in r["flow"].lower()]
+        rows   = [r for r in rows if r["flow"] and r["flow"] != _LEGACY
+                  and needle in r["flow"].lower()]
 
     if args.output_json:
         print(json.dumps(rows, indent=2))
