@@ -385,6 +385,12 @@ CONTACT_INSPECT_QUESTIONS = [
     {"label": "Include full transcript?", "arg": "--transcript", "type": "bool"},
 ]
 
+LAMBDA_ERRORS_QUESTIONS = [
+    {"label": "Lambda function name or ARN fragment", "arg": "--function", "required": True},
+    {"label": "Window (e.g. 4h, 7d — leave blank for 24h)", "arg": "--last", "required": False, "default": "24h"},
+    {"label": "CSV output file (leave blank to print)", "arg": "--csv", "required": False},
+]
+
 CONTACT_TIMELINE_QUESTIONS = [
     {"label": "Contact ID", "arg": "--contact-id", "required": True},
     {"label": "Include transcript turns?", "arg": "--transcript", "type": "bool"},
@@ -479,6 +485,13 @@ def tool_contacts_handled():
 
 def tool_contact_inspect():
     tool_runner("Contact Inspect", "contact_inspect.py", CONTACT_INSPECT_QUESTIONS)
+
+
+# ── Tool: Lambda Errors ───────────────────────────────────────────────────────
+
+
+def tool_lambda_errors():
+    tool_runner("Lambda Error Aggregator", "lambda_errors.py", LAMBDA_ERRORS_QUESTIONS)
 
 
 # ── Tool: Contact Timeline ────────────────────────────────────────────────────
@@ -894,6 +907,7 @@ GROUPS = [
         ("Contact Recordings", tool_contact_recordings,"S3 locations and presigned URLs for recordings and transcripts"),
         ("Contact Logs",       tool_contact_logs,      "Download CloudWatch flow-execution logs for a contact ID"),
         ("Lambda Tracer",      tool_lambda_tracer,     "Trace Lambda invocations and fetch execution logs for a contact"),
+        ("Lambda Errors",      tool_lambda_errors,     "Aggregate Lambda errors across all contacts for a function and time window"),
     ]),
     ("Flows", [
         ("Export Flow",        tool_export_flow,       "Export a contact flow definition to JSON by name"),

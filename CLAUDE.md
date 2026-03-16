@@ -17,6 +17,40 @@ pip install python-dateutil openpyxl --user
 
 ---
 
+### `lambda_errors.py` — Lambda Error Aggregator
+
+Scan Connect flow logs for a given Lambda function over a time window. Groups invocations by error type and lists affected contact IDs — useful for assessing blast radius after a bad Lambda deploy.
+
+```bash
+# Last 24h (default)
+python lambda_errors.py --instance-id <UUID> --function my-auth-function --region us-east-1
+
+# Custom window
+python lambda_errors.py --instance-id <UUID> --function my-auth-function --last 4h
+python lambda_errors.py --instance-id <UUID> --function my-auth-function --start 2026-03-15 --end 2026-03-16
+
+# Export full contact list per error type
+python lambda_errors.py --instance-id <UUID> --function my-auth-function --csv errors.csv
+
+# Raw JSON (pipe to jq)
+python lambda_errors.py --instance-id <UUID> --function my-auth-function --json | jq '.errors'
+```
+
+**APIs used:** `DescribeInstance`, `FilterLogEvents` (Connect flow log group)
+
+**Required IAM:**
+- `connect:DescribeInstance`
+- `logs:FilterLogEvents` on `/aws/connect/<instance-alias>`
+
+**Key behaviors:**
+- `--function` is matched as a case-insensitive substring of the Lambda ARN in each log entry — can be a full ARN, function name, or partial name
+- `--last` accepts `30m`, `4h`, `7d`, etc. (default: `24h`); `--start`/`--end` take `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`
+- Human output shows up to 15 contact IDs per error type; `--csv` / `--json` include all
+- Errors are sorted by frequency (most common first)
+- `--csv` columns: timestamp, contact_id, function_name, function_arn, flow_name, result, error_type
+
+---
+
 ### `contact_timeline.py` — Contact Timeline
 
 Chronological event timeline for a single contact. Stitches together contact metadata milestones (from DescribeContact), every flow block execution (from CloudWatch flow logs), Lambda invocations, and optionally Contact Lens transcript turns into a single sorted view.
