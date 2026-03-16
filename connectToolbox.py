@@ -408,6 +408,12 @@ CONTACT_RECORDINGS_QUESTIONS = [
     {"label": "URL expiry (secs)", "arg": "--url-expires", "required": False, "default": "3600"},
 ]
 
+FLOW_SCAN_QUESTIONS = [
+    {"label": "Flow name (leave blank to scan all)", "arg": "--name", "required": False},
+    {"label": "Flow type filter (e.g. CONTACT_FLOW, leave blank for all)", "arg": "--type", "required": False},
+    {"label": "Show per-block detail in bulk mode?", "arg": "--detail", "type": "bool"},
+]
+
 FLOW_TO_CHART_QUESTIONS = [
     {"label": "Flow JSON file path", "arg": None, "standalone": True, "required": True},
     {"label": "Format", "arg": "--format", "type": "choice", "choices": ["html", "mermaid", "dot"], "default": "html"},
@@ -607,6 +613,26 @@ def tool_lambda_tracer():
 
 def tool_contact_recordings():
     tool_runner("Contact Recordings", "contact_recordings.py", CONTACT_RECORDINGS_QUESTIONS)
+
+
+# ── Tool: Flow Scan ───────────────────────────────────────────────────────────
+
+def tool_flow_scan():
+    _header("Flow Scan")
+    iid, region, profile = ask_connect_defaults()
+    name   = ask("Flow name (leave blank to scan all)", required=False)
+    ftype  = ask("Flow type filter (e.g. CONTACT_FLOW, leave blank for all)", required=False)
+    detail = ask_bool("Show per-block detail?") if not name else False
+
+    args = connect_args(iid, region, profile)
+    if name:
+        args += ["--name", name]
+    else:
+        args += ["--all"]
+    if ftype:  args += ["--type",   ftype]
+    if detail: args += ["--detail"]
+
+    _run("flow_scan.py", args)
 
 
 # ── Tool: Export Flow ─────────────────────────────────────────────────────────
@@ -910,6 +936,7 @@ GROUPS = [
         ("Lambda Errors",      tool_lambda_errors,     "Aggregate Lambda errors across all contacts for a function and time window"),
     ]),
     ("Flows", [
+        ("Flow Scan",          tool_flow_scan,         "Scan flows for broken references, dead ends, missing error handlers"),
         ("Export Flow",        tool_export_flow,       "Export a contact flow definition to JSON by name"),
         ("Flow to Chart",      tool_flow_to_chart,     "Convert an exported flow JSON to a visual flowchart"),
     ]),

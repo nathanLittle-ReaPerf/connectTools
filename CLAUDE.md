@@ -17,6 +17,55 @@ pip install python-dateutil openpyxl --user
 
 ---
 
+### `flow_scan.py` — Flow Error Scanner
+
+Scan one or all contact flows for configuration issues. Works on local exported JSON files or live instance flows.
+
+```bash
+# Scan a local exported file
+python flow_scan.py Main_IVR.json
+
+# Scan a single flow by name from the instance
+python flow_scan.py --instance-id <UUID> --name "Main IVR" --region us-east-1
+
+# Scan all flows (summary table)
+python flow_scan.py --instance-id <UUID> --all
+
+# Bulk scan with per-block detail on flows that have issues
+python flow_scan.py --instance-id <UUID> --all --detail
+
+# Filter by flow type
+python flow_scan.py --instance-id <UUID> --all --type CONTACT_FLOW
+
+# JSON output (pipe to jq)
+python flow_scan.py --instance-id <UUID> --all --json | jq '.flows[] | select(.issue_count > 0)'
+```
+
+**APIs used:** `ListContactFlows`, `DescribeContactFlow`
+
+**Required IAM:** `connect:ListContactFlows`, `connect:DescribeContactFlow`
+
+**Issues detected:**
+
+| Severity | Kind | Description |
+|---|---|---|
+| ERROR | `broken_start` | StartAction references a block that doesn't exist |
+| ERROR | `broken_target` | Transition (default/error/condition branch) points to a missing block |
+| ERROR | `dead_end` | Non-terminal block with no outgoing transitions — contact gets stuck |
+| ERROR | `missing_lambda_arn` | InvokeLambdaFunction block with empty ARN |
+| WARN | `missing_error_branch` | Lambda/Transfer/InvokeFlow block with no error handler |
+| WARN | `missing_default` | Decision block has conditions but no default (fallback) branch |
+| WARN | `unreachable` | Block never referenced by any other block — dead code |
+| WARN | `missing_queue` | SetQueue block with no queue configured |
+
+**Key behaviors:**
+- Accepts both the `export_flow.py` envelope format (`{"metadata":..., "content":...}`) and raw flow JSON
+- `--all` bulk mode shows a summary table; add `--detail` for per-block breakdowns on flows with issues
+- `--name` is case-insensitive substring match; exits if multiple flows match
+- `--json` output includes `issue_count`, `errors`, `warnings`, and full `issues` array per flow
+
+---
+
 ### `lambda_errors.py` — Lambda Error Aggregator
 
 Scan Connect flow logs for a given Lambda function over a time window. Groups invocations by error type and lists affected contact IDs — useful for assessing blast radius after a bad Lambda deploy.
