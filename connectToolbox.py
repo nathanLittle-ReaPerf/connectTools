@@ -628,7 +628,7 @@ def _display_name(path: Path) -> str:
 
 def _parse_display_columns(query: str) -> list[str] | None:
     """Extract column names from the | display line, or None if not present."""
-    m = re.search(r"^\s*|\s*display\s+(.+)$\s*", query, re.IGNORECASE | re.MULTILINE)
+    m = re.search(r"^\s*\|\s*display\s+(.+)$", query, re.IGNORECASE | re.MULTILINE)
     if not m:
         return None
     return [c.strip() for c in m.group(1).split(",") if c.strip()]
