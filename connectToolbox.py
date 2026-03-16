@@ -385,6 +385,12 @@ CONTACT_INSPECT_QUESTIONS = [
     {"label": "Include full transcript?", "arg": "--transcript", "type": "bool"},
 ]
 
+CONTACT_DIFF_QUESTIONS = [
+    {"label": "Contact ID A", "arg": "--contact-id-a", "required": True},
+    {"label": "Contact ID B", "arg": "--contact-id-b", "required": True},
+    {"label": "Show all attributes (not just differing)?", "arg": "--all-attrs", "type": "bool"},
+]
+
 CONTACT_RECORDINGS_QUESTIONS = [
     {"label": "Contact ID", "arg": "--contact-id", "required": True},
     {"label": "URL expiry (secs)", "arg": "--url-expires", "required": False, "default": "3600"},
@@ -467,6 +473,13 @@ def tool_contacts_handled():
 
 def tool_contact_inspect():
     tool_runner("Contact Inspect", "contact_inspect.py", CONTACT_INSPECT_QUESTIONS)
+
+
+# ── Tool: Contact Diff ────────────────────────────────────────────────────────
+
+
+def tool_contact_diff():
+    tool_runner("Contact Diff", "contact_diff.py", CONTACT_DIFF_QUESTIONS)
 
 
 # ── Tool: Contact Search ──────────────────────────────────────────────────────
@@ -862,6 +875,7 @@ GROUPS = [
     ("Contacts", [
         ("Contacts Handled",   tool_contacts_handled,  "Sum CONTACTS_HANDLED across all queues for a month"),
         ("Contact Inspect",    tool_contact_inspect,   "Full deep-dive: attributes, Lens analysis, transfer chain"),
+        ("Contact Diff",       tool_contact_diff,      "Side-by-side diff of two contacts: core fields, attributes, and Lens"),
         ("Contact Search",     tool_contact_search,    "Search contacts by date, channel, agent, queue, or attribute"),
         ("Contact Recordings", tool_contact_recordings,"S3 locations and presigned URLs for recordings and transcripts"),
         ("Contact Logs",       tool_contact_logs,      "Download CloudWatch flow-execution logs for a contact ID"),

@@ -17,6 +17,43 @@ pip install python-dateutil openpyxl --user
 
 ---
 
+### `contact_diff.py` — Contact Diff
+
+Side-by-side comparison of two contacts in the same instance. Diffs core metadata, custom attributes, and Contact Lens outcome to answer "why did these two contacts behave differently?"
+
+```bash
+# Human-readable diff
+python contact_diff.py --instance-id <UUID> --contact-id-a <UUID> --contact-id-b <UUID> --region us-east-1
+
+# Show all attributes (not just differing ones)
+python contact_diff.py --instance-id <UUID> --contact-id-a <UUID> --contact-id-b <UUID> --all-attrs
+
+# Raw JSON (pipe to jq)
+python contact_diff.py --instance-id <UUID> --contact-id-a <UUID> --contact-id-b <UUID> --json | jq '.diff.attributes'
+```
+
+**APIs used:** `DescribeContact`, `GetContactAttributes`, `DescribeQueue`, `DescribeUser`, `ListRealtimeContactAnalysisSegmentsV2`
+
+**Required IAM:**
+- `connect:DescribeContact`
+- `connect:GetContactAttributes`
+- `connect:DescribeQueue`
+- `connect:DescribeUser`
+- `connect:ListRealtimeContactAnalysisSegments`
+
+**Output sections:**
+- **CORE** — always shows all rows: Channel, Initiation method, Queue, Agent, Duration, Initiated, Disconnected, Disconnect reason, Customer endpoint, Previous contact ID
+- **ATTRIBUTES** — by default shows only differing keys (use `--all-attrs` for all); shows `(all match)` or `(none)` when appropriate
+- **CONTACT LENS** — always shows all rows: Status, Turns, Agent sentiment, Customer sentiment, Categories, Issues, Post-contact summary
+
+**Key behaviors:**
+- Lens status is normalized to `"Expired (>24h)"` for both contacts to avoid spurious mismatches due to different reported ages
+- Attribute keys missing from one side display as `[absent]` (dimmed)
+- `--json` output includes full raw contact data plus a `diff` block with per-field match flags for all three sections
+- Both contact IDs must belong to the same instance
+
+---
+
 ### `contact_inspect.py` — Contact Deep Dive
 
 Pull all available data for a single contact ID: core metadata, custom attributes, references, Contact Lens transcript/sentiment/issues, and transfer chain.
