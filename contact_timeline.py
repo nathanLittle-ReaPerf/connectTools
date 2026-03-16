@@ -575,7 +575,9 @@ def main():
     end_ms   = _ms(min(end_ts + dt.timedelta(minutes=5), now) if end_ts else now)
 
     cw_events = filter_log_events(
-        logs_client, log_group, f'"{args.contact_id}"', start_ms, end_ms,
+        logs_client, log_group,
+        f'{{ $.ContactId = "{args.contact_id}" }}',
+        start_ms, end_ms,
     )
 
     if not cw_events:

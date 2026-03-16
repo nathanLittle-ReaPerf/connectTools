@@ -441,7 +441,9 @@ def main():
     print(f"  Fetching flow logs...", file=sys.stderr)
 
     connect_events = filter_log_events(
-        logs_client, log_group, f'"{args.contact_id}"', start_ms, end_ms
+        logs_client, log_group,
+        f'{{ $.ContactId = "{args.contact_id}" }}',
+        start_ms, end_ms,
     )
 
     if not connect_events:
