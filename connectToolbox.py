@@ -926,6 +926,25 @@ def tool_instance_snapshot():
     _run("instance_snapshot.py", connect_args(iid, region, profile))
 
 
+# ── Tool: Phone Numbers ────────────────────────────────────────────────────────
+
+def tool_phone_numbers():
+    _header("Phone Numbers")
+    iid, region, profile = ask_connect_defaults()
+
+    flow_filter = ask("Filter by flow name (leave blank for all)", required=False)
+    unassigned  = ask_bool("Show unassigned numbers only?", default=False)
+
+    args = connect_args(iid, region, profile)
+    if flow_filter: args += ["--flow", flow_filter]
+    if unassigned:  args += ["--unassigned"]
+
+    csv_out = ask("CSV output file (leave blank to print)", required=False)
+    if csv_out: args += ["--csv", csv_out]
+
+    _run("phone_numbers.py", args)
+
+
 # ── Tool: Settings ────────────────────────────────────────────────────────────
 
 def tool_settings():
@@ -989,6 +1008,7 @@ GROUPS = [
     ]),
     ("Instance", [
         ("Instance Snapshot",  tool_instance_snapshot, "Fetch and store instance inventory for fast name resolution"),
+        ("Phone Numbers",      tool_phone_numbers,     "List all claimed phone numbers and their associated contact flows"),
     ]),
     ("Settings", [
         ("Settings",           tool_settings,          "View and edit saved instance ID, region, and profile defaults"),
