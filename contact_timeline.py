@@ -579,7 +579,22 @@ def main():
     )
 
     if not cw_events:
-        print(f"  Warning: no flow log events found for {args.contact_id}.", file=sys.stderr)
+        # Distinguish "flow logging not enabled / log group empty" from "contact not in logs"
+        probe = filter_log_events(logs_client, log_group, "", start_ms, end_ms)
+        if not probe:
+            print(
+                f"  Warning: no flow log events found in {log_group} for the contact's time window.\n"
+                f"           Flow logging may not be enabled on this instance.\n"
+                f"           Check: Connect console → Instance → Data storage → Flow logs.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"  Warning: flow logs exist for this time window but contact {args.contact_id}\n"
+                f"           was not found. The flows this contact traversed may not have\n"
+                f"           flow logging enabled (set per-flow in the flow editor).",
+                file=sys.stderr,
+            )
 
     # Contact Lens
     lens_data = {"skipped": "not requested"}
