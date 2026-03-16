@@ -904,6 +904,25 @@ def tool_routing_profile_audit():
     _run("routing_profile_audit.py", args)
 
 
+# ── Tool: Instance Snapshot ───────────────────────────────────────────────────
+
+def tool_instance_snapshot():
+    _header("Instance Snapshot")
+    iid, region, profile = ask_connect_defaults()
+
+    import ct_snapshot
+    existing = ct_snapshot.load(iid)
+    if existing:
+        age = ct_snapshot.age_hours(existing)
+        print(f"\n  Existing snapshot found ({int(age)}h old).")
+        if not ask_bool("Refresh it?", default=age >= 24):
+            # Show summary instead
+            _run("instance_snapshot.py", connect_args(iid, region, profile) + ["--show"])
+            return
+
+    _run("instance_snapshot.py", connect_args(iid, region, profile))
+
+
 # ── Tool: Settings ────────────────────────────────────────────────────────────
 
 def tool_settings():
@@ -964,6 +983,9 @@ GROUPS = [
         ("Agent Activity",        tool_agent_activity,       "Agent handle time and activity report by date range"),
         ("Agent List",            tool_agent_list,           "List agents with routing profile, hierarchy, and security profiles"),
         ("Routing Profile Audit", tool_routing_profile_audit,"Per-profile queue assignments, agent counts, and anomalies"),
+    ]),
+    ("Instance", [
+        ("Instance Snapshot",  tool_instance_snapshot, "Fetch and store instance inventory for fast name resolution"),
     ]),
     ("Settings", [
         ("Settings",           tool_settings,          "View and edit saved instance ID, region, and profile defaults"),

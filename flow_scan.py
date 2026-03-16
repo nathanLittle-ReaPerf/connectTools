@@ -20,6 +20,11 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+try:
+    import ct_snapshot as _ct_snapshot
+except ImportError:
+    _ct_snapshot = None
+
 RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 
 # ── Block classification ──────────────────────────────────────────────────────
@@ -183,8 +188,16 @@ def scan_flow(content: dict) -> list:
     return issues
 
 
+_snapshot: dict | None = None   # populated in main() if available
+
+
 def _short(identifier: str) -> str:
-    """Shorten a UUID to first 8 chars; leave human-readable names as-is."""
+    """Resolve identifier to a name via snapshot, or shorten UUID, or return as-is."""
+    if _snapshot and _ct_snapshot:
+        for rtype in ("flows", "queues", "routing_profiles", "prompts", "quick_connects"):
+            name = _ct_snapshot.resolve(_snapshot, rtype, identifier)
+            if name:
+                return f"{name} ({identifier[:8]}…)"
     if re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}", identifier.lower()):
         return identifier[:8] + "…"
     return identifier[:40]
@@ -428,6 +441,8 @@ examples:
         p.error("provide a FLOW_JSON file, --name <name>, or --all")
     if (args.all or args.name) and not args.instance_id:
         p.error("--instance-id is required with --name and --all")
+    if args.flow_file and args.instance_id:
+        p.error("--instance-id cannot be combined with a local FLOW_JSON file")
 
     return args
 
@@ -436,6 +451,13 @@ examples:
 
 def main():
     args = parse_args()
+
+    # ── Load snapshot for name resolution (optional) ─────────────────────────
+    global _snapshot
+    if args.instance_id and _ct_snapshot:
+        _snapshot = _ct_snapshot.load(args.instance_id)
+        if _snapshot:
+            _ct_snapshot.warn_if_stale(_snapshot)
 
     # ── Local file mode ───────────────────────────────────────────────────────
     if args.flow_file:

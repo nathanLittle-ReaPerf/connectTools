@@ -17,6 +17,47 @@ pip install python-dateutil openpyxl --user
 
 ---
 
+### `instance_snapshot.py` — Instance Snapshot
+
+Fetches all listable resources from a Connect instance and stores them at `~/.connecttools/snapshot_<instance-id>.json`. Other tools load this snapshot to resolve IDs/ARNs to names without making live API calls.
+
+```bash
+# Fetch and save snapshot
+python instance_snapshot.py --instance-id <UUID> --region us-east-1
+
+# Show summary of stored snapshot (no API calls)
+python instance_snapshot.py --instance-id <UUID> --show
+
+# Search the snapshot by resource type and name fragment
+python instance_snapshot.py --instance-id <UUID> --lookup queues "Billing"
+python instance_snapshot.py --instance-id <UUID> --lookup flows "IVR"
+python instance_snapshot.py --instance-id <UUID> --lookup users "jsmith"
+
+# Dump full snapshot as JSON
+python instance_snapshot.py --instance-id <UUID> --json | jq '.queues'
+```
+
+**APIs used:** `DescribeInstance`, `ListQueues`, `ListContactFlows`, `ListRoutingProfiles`, `ListHoursOfOperations`, `ListPrompts`, `ListQuickConnects`, `ListSecurityProfiles`, `ListPhoneNumbers`, `ListUsers`
+
+**Required IAM:** `connect:DescribeInstance` + `connect:ListXxx` for each resource type above
+
+**Helper module:** `ct_snapshot.py` — importable by other tools:
+- `ct_snapshot.load(instance_id)` → snapshot dict or None
+- `ct_snapshot.resolve(snapshot, resource_type, id_or_arn)` → name string or None
+- `ct_snapshot.search(snapshot, resource_type, name_fragment)` → list of matching items
+- `ct_snapshot.warn_if_stale(snapshot)` → prints stderr warning if >24h old
+- `ct_snapshot.age_hours(snapshot)` → float
+
+**Key behaviors:**
+- Resources stored as dicts keyed by ID for O(1) lookup
+- ARN resolution: extracts last path segment and looks up by ID
+- Users stored with `username` as display name (full name requires `DescribeUser` — too expensive for bulk fetch)
+- Missing/inaccessible resource types silently skipped (some may not be configured on all instances)
+- `flow_scan.py` automatically loads the snapshot when `--instance-id` is provided to resolve broken reference IDs to human-readable names
+- Stale threshold: 24h (configurable in `ct_snapshot.STALE_THRESHOLD`)
+
+---
+
 ### `flow_scan.py` — Flow Error Scanner
 
 Scan one or all contact flows for configuration issues. Works on local exported JSON files or live instance flows.
