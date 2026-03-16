@@ -21,6 +21,75 @@ from botocore.exceptions import ClientError
 RETRY_CONFIG         = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 LENS_RETENTION_HOURS = 24
 
+_MAN = """\
+NAME
+    contact_timeline.py — Chronological event timeline for an Amazon Connect contact
+
+SYNOPSIS
+    python contact_timeline.py --instance-id UUID --contact-id UUID [OPTIONS]
+
+DESCRIPTION
+    Stitches together contact metadata milestones, every flow block execution
+    from CloudWatch Logs, Lambda invocations, and (optionally) Contact Lens
+    transcript turns into a single sorted timeline. Each event is shown with
+    a T+ offset from contact initiation so you can see exactly how long each
+    step took. Use --json or --output to export the full timeline as JSON.
+
+OPTIONS
+    --instance-id UUID
+        Amazon Connect instance UUID. Required.
+
+    --contact-id UUID
+        Contact UUID to build the timeline for. Required.
+
+    --region REGION
+        AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
+
+    --profile NAME
+        AWS named profile for local development.
+
+    --log-group NAME
+        Override the auto-discovered Connect CloudWatch log group.
+        Default: /aws/connect/<instance-alias>.
+
+    --transcript
+        Include Contact Lens transcript turns as LENS events in the timeline.
+
+    --json
+        Print the timeline as JSON to stdout.
+
+    --output FILE
+        Write JSON timeline to a file.
+
+EXAMPLES
+    # Human-readable timeline
+    python contact_timeline.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
+
+    # Include transcript turns
+    python contact_timeline.py --instance-id <UUID> --contact-id <UUID> --transcript
+
+    # JSON output
+    python contact_timeline.py --instance-id <UUID> --contact-id <UUID> --json
+
+    # Override log group and save to file
+    python contact_timeline.py --instance-id <UUID> --contact-id <UUID> \\
+        --log-group /aws/connect/my-instance --output timeline.json
+
+IAM PERMISSIONS
+    connect:DescribeContact
+    connect:DescribeInstance
+    connect:DescribeQueue
+    connect:DescribeUser
+    connect:ListRealtimeContactAnalysisSegments
+    logs:FilterLogEvents
+
+NOTES
+    Flow logs are fetched from 2 minutes before initiation to 5 minutes after
+    disconnect (or now if the contact is still active). If no flow logs are found
+    for the contact ID, a warning is printed but the contact milestone events are
+    still shown.
+"""
+
 _LAMBDA_MODULE_TYPES = {"InvokeExternalResource", "InvokeLambdaFunction"}
 
 _FLOW_BLOCK_LABELS = {
@@ -459,6 +528,9 @@ def _ms(ts: dt.datetime) -> int:
 
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     args           = parse_args()
     connect, logs_client = make_clients(args.region, args.profile)
 

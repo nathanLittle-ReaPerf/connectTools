@@ -233,9 +233,86 @@ def write_csv(path: Path, agent_metrics: dict, user_map: dict) -> int:
     return len(rows)
 
 
+_MAN = """\
+NAME
+    agent_activity.py — Per-agent activity report for a given period
+
+SYNOPSIS
+    python agent_activity.py (--instance-id UUID | --instance-arn ARN) \\
+        (--period PERIOD | --start YYYY-MM-DD) [OPTIONS]
+
+DESCRIPTION
+    Pulls GetMetricDataV2 metrics per agent for a specified time period and writes
+    the results to a CSV file. Metrics include contacts handled, occupancy,
+    online time, on-contact time, idle time, non-productive time, error status
+    time, average handle time, average after-contact work time, and average talk
+    time. Use --agent to restrict to specific agents by login name.
+
+OPTIONS
+    --instance-id UUID
+        Amazon Connect instance UUID. Mutually exclusive with --instance-arn.
+
+    --instance-arn ARN
+        Amazon Connect instance ARN. Mutually exclusive with --instance-id.
+
+    --period PERIOD
+        Named time period. Choices: today, yesterday, this-week, last-week,
+        this-month, last-month. Mutually exclusive with --start.
+
+    --start YYYY-MM-DD
+        Custom range start (inclusive). Mutually exclusive with --period.
+
+    --end YYYY-MM-DD
+        Custom range end (inclusive). Defaults to today if --start is given.
+
+    --agent LOGIN
+        Filter to a specific agent login (repeatable).
+
+    --region REGION
+        AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
+
+    --profile NAME
+        AWS named profile for local development.
+
+    --output PATH
+        CSV output path. Default: auto-named in current directory.
+
+EXAMPLES
+    # Last month, all agents
+    python agent_activity.py --instance-id <UUID> --period last-month
+
+    # This week, specific agent
+    python agent_activity.py --instance-id <UUID> --period this-week --agent jsmith
+
+    # Multiple agents
+    python agent_activity.py --instance-id <UUID> --period this-week \\
+        --agent jsmith --agent bjones
+
+    # Custom date range
+    python agent_activity.py --instance-id <UUID> --start 2025-01-01 --end 2025-01-31
+
+    # Yesterday, write to specific file
+    python agent_activity.py --instance-id <UUID> --period yesterday --output /tmp/report.csv
+
+IAM PERMISSIONS
+    connect:DescribeInstance
+    connect:ListUsers
+    connect:ListRoutingProfiles
+    connect:GetMetricDataV2
+
+NOTES
+    GetMetricDataV2 retains historical data for approximately 93 days. Agents
+    with zero activity in the period are included in the output with zero values.
+    The --agent filter is applied by resolving login names to user IDs before
+    querying the metrics API.
+"""
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     p = argparse.ArgumentParser(
         description="Per-agent activity report for a given period.",
         formatter_class=argparse.RawDescriptionHelpFormatter,

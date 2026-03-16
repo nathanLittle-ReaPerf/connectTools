@@ -305,9 +305,83 @@ def print_lookup(results: list, resource_type: str, name_fragment: str):
         print()
 
 
+_MAN = """\
+NAME
+    instance_snapshot.py — Fetch and store an Amazon Connect instance inventory
+
+SYNOPSIS
+    python instance_snapshot.py --instance-id UUID [OPTIONS]
+
+DESCRIPTION
+    Pulls all listable resources from an Amazon Connect instance (queues, flows,
+    routing profiles, hours of operation, prompts, quick connects, security profiles,
+    phone numbers, and users) and saves them to ~/.connecttools/snapshot_<instance-id>.json.
+    This snapshot is used by other tools (flow_scan.py, etc.) as an offline
+    name-resolution cache. Use --show to view a stored snapshot, --lookup to search
+    by resource type and name, or --json to dump the full snapshot as JSON.
+
+OPTIONS
+    --instance-id UUID
+        Amazon Connect instance UUID. Required.
+
+    --region REGION
+        AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
+
+    --profile NAME
+        AWS named profile for local development.
+
+    --show
+        Print a summary of the stored snapshot (resource counts, last refreshed).
+        No API calls are made. Mutually exclusive with --json and --lookup.
+
+    --json
+        Dump the full stored snapshot as JSON to stdout. No refresh.
+        Mutually exclusive with --show and --lookup.
+
+    --lookup TYPE NAME
+        Search the snapshot for a resource by type and name fragment.
+        TYPE examples: queues, flows, routing_profiles, users, prompts.
+        Mutually exclusive with --show and --json.
+
+EXAMPLES
+    # Fetch and save snapshot
+    python instance_snapshot.py --instance-id <UUID> --region us-east-1
+
+    # Show summary of stored snapshot (no API calls)
+    python instance_snapshot.py --instance-id <UUID> --show
+
+    # Search for a queue by name
+    python instance_snapshot.py --instance-id <UUID> --lookup queues "Billing"
+
+    # Search for a flow
+    python instance_snapshot.py --instance-id <UUID> --lookup flows "IVR"
+
+    # Dump full snapshot as JSON
+    python instance_snapshot.py --instance-id <UUID> --json
+
+IAM PERMISSIONS
+    connect:ListQueues
+    connect:ListContactFlows
+    connect:ListRoutingProfiles
+    connect:ListHoursOfOperations
+    connect:ListPrompts
+    connect:ListQuickConnects
+    connect:ListSecurityProfiles
+    connect:ListPhoneNumbers
+    connect:ListUsers
+
+NOTES
+    The snapshot is stored at ~/.connecttools/snapshot_<instance-id>.json.
+    Tools that use the snapshot for name resolution will warn if the snapshot
+    is older than 24 hours. Run this tool again to refresh it.
+"""
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     args = parse_args()
 
     # ── Read-only modes (no API calls) ────────────────────────────────────────

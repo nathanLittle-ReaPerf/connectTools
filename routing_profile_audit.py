@@ -19,6 +19,68 @@ from botocore.exceptions import ClientError
 
 RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 
+_MAN = """\
+NAME
+    routing_profile_audit.py — Audit routing profiles in an Amazon Connect instance
+
+SYNOPSIS
+    python routing_profile_audit.py --instance-id UUID [OPTIONS]
+
+DESCRIPTION
+    Lists all routing profiles with their assigned queues (channel, priority, delay)
+    and agent counts. Flags three types of anomalies: profiles with no agents
+    assigned, profiles with no queues configured, and queues not assigned to any
+    routing profile. Use --name to filter to a specific profile, --csv to export,
+    or --json for machine-readable output.
+
+OPTIONS
+    --instance-id UUID
+        Amazon Connect instance UUID. Required.
+
+    --region REGION
+        AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
+
+    --profile NAME
+        AWS named profile for local development.
+
+    --name SUBSTR
+        Filter to routing profiles whose name contains SUBSTR (case-insensitive).
+
+    --csv FILE
+        Write CSV output to FILE. Includes: profile name, queue name, channel,
+        priority, delay, agent count, and anomaly notes.
+
+    --json
+        Print JSON to stdout.
+
+EXAMPLES
+    # All profiles with queue assignments and agent counts
+    python routing_profile_audit.py --instance-id <UUID> --region us-east-1
+
+    # Filter to one profile by name substring
+    python routing_profile_audit.py --instance-id <UUID> --name "Tier 2"
+
+    # Export to CSV
+    python routing_profile_audit.py --instance-id <UUID> --csv audit.csv
+
+    # JSON output, inspect anomalies
+    python routing_profile_audit.py --instance-id <UUID> --json | jq '.anomalies'
+
+IAM PERMISSIONS
+    connect:ListRoutingProfiles
+    connect:ListRoutingProfileQueues
+    connect:ListQueues
+    connect:ListRoutingProfileUsers
+    connect:ListUsers
+    connect:DescribeUser
+
+NOTES
+    Agent counts use ListRoutingProfileUsers when available (boto3 >= 1.35.0).
+    On older boto3, the tool falls back to ListUsers + DescribeUser per user and
+    shows a percentage-based progress bar. connectToolbox.py auto-upgrades boto3
+    to at least 1.35.0 on startup.
+"""
+
 
 # ── Argument parsing ───────────────────────────────────────────────────────────
 
@@ -354,6 +416,9 @@ def write_csv(report, path):
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     args   = parse_args()
     client = make_client(args.region, args.profile)
     report = build_report(client, args.instance_id, args.name)

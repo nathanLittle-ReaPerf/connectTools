@@ -14,6 +14,68 @@ from botocore.exceptions import ClientError
 
 RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 
+_MAN = """\
+NAME
+    contact_logs.py — Download CloudWatch flow-execution logs for a Connect contact
+
+SYNOPSIS
+    python contact_logs.py --instance-id UUID --contact-id UUID [OPTIONS]
+
+DESCRIPTION
+    Fetches the Amazon Connect flow-execution log events for a given contact ID
+    from CloudWatch Logs. The search window is the contact's initiation timestamp
+    minus 2 minutes to disconnect plus 5 minutes. Results are written to a JSON
+    file (structured, with parsed message fields) or a plain-text file. Useful
+    for offline analysis or sharing logs without CloudWatch console access.
+
+OPTIONS
+    --instance-id UUID
+        Amazon Connect instance UUID. Required.
+
+    --contact-id UUID
+        Contact UUID. Required.
+
+    --region REGION
+        AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
+
+    --profile NAME
+        AWS named profile for local development.
+
+    --log-group NAME
+        Override the auto-discovered Connect CloudWatch log group.
+        Default: /aws/connect/<instance-alias>.
+
+    --text
+        Write plain-text log lines instead of structured JSON.
+
+    --output FILE
+        Output file path. Default: <contact-id>_logs.json or <contact-id>_logs.txt.
+
+EXAMPLES
+    # Download logs as JSON (default)
+    python contact_logs.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
+
+    # Plain-text format
+    python contact_logs.py --instance-id <UUID> --contact-id <UUID> --text
+
+    # Save to a specific file
+    python contact_logs.py --instance-id <UUID> --contact-id <UUID> --output my_logs.json
+
+    # Override log group
+    python contact_logs.py --instance-id <UUID> --contact-id <UUID> \\
+        --log-group /aws/connect/my-instance
+
+IAM PERMISSIONS
+    connect:DescribeContact
+    connect:DescribeInstance
+    logs:FilterLogEvents
+
+NOTES
+    The log group is auto-discovered from the instance alias via DescribeInstance.
+    If DescribeInstance fails, pass --log-group explicitly. The log group name is
+    case-sensitive and must match the alias exactly.
+"""
+
 
 # ── Argument parsing ───────────────────────────────────────────────────────────
 
@@ -154,6 +216,9 @@ def write_text(events, out_path):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     args = parse_args()
     connect, logs_client = make_clients(args.region, args.profile)
 

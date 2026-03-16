@@ -22,6 +22,75 @@ RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 # Seconds either side of the Connect-reported invocation time to search Lambda logs
 LAMBDA_WINDOW_SECS = 30
 
+_MAN = """\
+NAME
+    lambda_tracer.py — Trace Lambda invocations for an Amazon Connect contact
+
+SYNOPSIS
+    python lambda_tracer.py --instance-id UUID --contact-id UUID [OPTIONS]
+
+DESCRIPTION
+    Pulls Connect flow-execution logs for a contact, finds every Lambda invocation
+    (InvokeExternalResource / InvokeLambdaFunction blocks), and fetches the actual
+    Lambda CloudWatch log lines within a ±30-second window around each invocation
+    timestamp. Useful for diagnosing Lambda failures that affected a specific call.
+    Use --summary for a fast overview without fetching Lambda logs; you can then
+    enter an invocation number to drill down interactively.
+
+OPTIONS
+    --instance-id UUID
+        Amazon Connect instance UUID. Required.
+
+    --contact-id UUID
+        Contact UUID. Required.
+
+    --region REGION
+        AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
+
+    --profile NAME
+        AWS named profile for local development.
+
+    --log-group NAME
+        Override the auto-discovered Connect CloudWatch log group.
+        Default: /aws/connect/<instance-alias>.
+
+    --summary
+        Show invocation metadata only (ARN, timestamp, result, response) without
+        fetching Lambda log lines. After output, prompts to drill down by number.
+
+    --json
+        Print the full trace as JSON to stdout.
+
+    --output FILE
+        Write JSON output to a file (default: <contact-id>_lambda_trace.json).
+
+EXAMPLES
+    # Full trace with Lambda log lines
+    python lambda_tracer.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
+
+    # Summary only (no Lambda log fetch)
+    python lambda_tracer.py --instance-id <UUID> --contact-id <UUID> --summary
+
+    # JSON output saved to file
+    python lambda_tracer.py --instance-id <UUID> --contact-id <UUID> --output trace.json
+
+    # Override log group
+    python lambda_tracer.py --instance-id <UUID> --contact-id <UUID> \\
+        --log-group /aws/connect/myInstance
+
+IAM PERMISSIONS
+    connect:DescribeContact
+    connect:DescribeInstance
+    logs:FilterLogEvents (on /aws/connect/<instance-alias>)
+    logs:FilterLogEvents (on /aws/lambda/<function-name> for each invoked function)
+
+NOTES
+    Lambda logs are fetched within ±30 seconds of the Connect-reported invocation
+    timestamp. High-concurrency Lambda functions may include unrelated log lines
+    from concurrent invocations in that window. The log group is case-sensitive
+    and auto-discovered from the instance alias; pass --log-group to override.
+"""
+
 
 # ── Argument parsing ───────────────────────────────────────────────────────────
 
@@ -336,6 +405,9 @@ def drill_down_loop(logs_client, invocations_with_logs):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     args = parse_args()
     connect, logs_client = make_clients(args.region, args.profile)
 

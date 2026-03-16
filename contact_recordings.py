@@ -14,6 +14,65 @@ from botocore.exceptions import ClientError
 
 RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 
+_MAN = """\
+NAME
+    contact_recordings.py — Locate S3 recordings and transcripts for a Connect contact
+
+SYNOPSIS
+    python contact_recordings.py --instance-id UUID --contact-id UUID [OPTIONS]
+
+DESCRIPTION
+    Reads the instance storage configuration to discover the S3 bucket(s) used for
+    call recordings and chat transcripts, then searches by contact date prefix and
+    contact ID to find all matching files. Generates presigned download URLs for
+    each artifact (original and redacted variants). Works for both VOICE and CHAT
+    channel contacts.
+
+OPTIONS
+    --instance-id UUID
+        Amazon Connect instance UUID. Required.
+
+    --contact-id UUID
+        Contact UUID. Required.
+
+    --region REGION
+        AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
+
+    --profile NAME
+        AWS named profile for local development.
+
+    --url-expires SECONDS
+        Presigned URL expiry in seconds. Default: 3600 (1 hour).
+        Maximum: 604800 (7 days). CloudShell IAM role credentials cap at 3600s
+        regardless of the value set here.
+
+    --json
+        Emit raw JSON grouped under artifacts.recordings, artifacts.analysis,
+        and artifacts.transcripts.
+
+EXAMPLES
+    # Human-readable output with 1-hour presigned URLs
+    python contact_recordings.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
+
+    # Extend presigned URL expiry to 2 hours
+    python contact_recordings.py --instance-id <UUID> --contact-id <UUID> --url-expires 7200
+
+    # Raw JSON, extract artifact list with jq
+    python contact_recordings.py --instance-id <UUID> --contact-id <UUID> --json | jq '.artifacts'
+
+IAM PERMISSIONS
+    connect:DescribeContact
+    connect:ListInstanceStorageConfigs
+    s3:ListBucket
+    s3:GetObject
+
+NOTES
+    Bucket names and prefixes are read from ListInstanceStorageConfigs — no
+    hardcoded bucket names are used. For VOICE contacts, both the recording
+    and Contact Lens analysis (original + redacted) are searched. For CHAT
+    contacts, the chat transcript and Contact Lens analysis are searched.
+"""
+
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 
@@ -295,6 +354,9 @@ _CLOUDSHELL_CAP  = 3600   # IAM role credentials (CloudShell) cap at 1 hour rega
 
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     args = parse_args()
 
     if args.url_expires > _MAX_URL_EXPIRES:

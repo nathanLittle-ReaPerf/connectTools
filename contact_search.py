@@ -16,6 +16,103 @@ from botocore.exceptions import ClientError
 
 RETRY_CONFIG = Config(retries={"max_attempts": 10, "mode": "adaptive"})
 
+_MAN = """\
+NAME
+    contact_search.py — Search Amazon Connect contacts and export to CSV or JSON
+
+SYNOPSIS
+    python contact_search.py --instance-id UUID --start DATETIME --end DATETIME [OPTIONS]
+
+DESCRIPTION
+    Wraps the SearchContacts API to find contacts in a time range with optional
+    filters on channel, queue, agent, initiation method, and custom contact
+    attributes. Results are exported to CSV by default, or to JSON with --json.
+    Due to the API's 0.5 TPS rate limit, the tool sleeps 2 seconds between pages,
+    so large result sets may take a while.
+
+OPTIONS
+    --instance-id UUID
+        Amazon Connect instance UUID. Required.
+
+    --start DATETIME
+        Start of time range. Format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS (UTC). Required.
+
+    --end DATETIME
+        End of time range. Same format as --start. Required.
+
+    --time-type TYPE
+        Timestamp field to filter on. Default: INITIATION_TIMESTAMP.
+        Choices: INITIATION_TIMESTAMP, DISCONNECT_TIMESTAMP, SCHEDULED_TIMESTAMP.
+
+    --channel CH
+        Filter by channel (repeatable). Choices: VOICE, CHAT, TASK, EMAIL.
+
+    --queue ID
+        Filter by queue ID (repeatable).
+
+    --agent ID
+        Filter by agent user ID (repeatable).
+
+    --agent-login LOGIN
+        Filter by agent login/username (repeatable). Resolved to user ID automatically.
+
+    --initiation-method METHOD
+        Filter by initiation method (repeatable).
+        Choices: INBOUND, OUTBOUND, TRANSFER, CALLBACK, API,
+                 QUEUE_TRANSFER, EXTERNAL_OUTBOUND, MONITOR, DISCONNECT.
+
+    --attribute KEY=VALUE
+        Filter by a custom contact attribute (repeatable).
+
+    --sort-by FIELD
+        Sort field. Default: INITIATION_TIMESTAMP.
+        Choices: INITIATION_TIMESTAMP, SCHEDULED_TIMESTAMP, DISCONNECT_TIMESTAMP,
+                 HANDLE_TIME, AGENT_INTERACTION_DURATION, CUSTOMER_HOLD_DURATION.
+
+    --sort-order ORDER
+        Sort direction. Default: DESCENDING. Choices: ASCENDING, DESCENDING.
+
+    --limit N
+        Maximum number of contacts to return. Default: all.
+
+    --output FILE
+        CSV output path. Default: contacts_YYYYMMDD_HHMMSS.csv.
+
+    --json
+        Emit JSON array to stdout instead of writing a CSV file.
+
+    --region REGION
+        AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
+
+    --profile NAME
+        AWS named profile for local development.
+
+EXAMPLES
+    # All contacts for a date range (writes contacts_YYYYMMDD_HHMMSS.csv)
+    python contact_search.py --instance-id <UUID> --start 2026-03-01 --end 2026-03-02
+
+    # Voice inbound contacts for a specific queue
+    python contact_search.py --instance-id <UUID> --start 2026-03-01 --end 2026-03-02 \\
+        --channel VOICE --initiation-method INBOUND --queue <QUEUE-ID>
+
+    # Filter by custom attribute, write to a named file
+    python contact_search.py --instance-id <UUID> --start 2026-03-01 --end 2026-03-02 \\
+        --attribute Department=Billing --output billing.csv
+
+    # First 500 contacts oldest-first as JSON
+    python contact_search.py --instance-id <UUID> --start 2026-03-01 --end 2026-03-04 \\
+        --sort-order ASCENDING --limit 500 --json | jq '.[0].Id'
+
+IAM PERMISSIONS
+    connect:SearchContacts
+    connect:ListUsers
+
+NOTES
+    SearchContacts is throttled at 0.5 TPS with a burst of 1. The tool sleeps
+    2 seconds between pages to stay within this limit. Large date ranges with
+    many contacts may take several minutes to fetch.
+"""
+
 # SearchContacts throttle: 0.5 TPS burst 1 — sleep between pages
 PAGE_SLEEP_SECS = 2.0
 MAX_PAGE_SIZE   = 100
@@ -307,6 +404,9 @@ def write_csv(contacts: list, path: str) -> int:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     args = parse_args()
 
     try:

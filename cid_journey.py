@@ -628,6 +628,46 @@ def to_html(elements: list[dict], title: str) -> str:
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
+_MAN = """\
+NAME
+    cid_journey.py — Render a Cytoscape.js caller journey map from a CID_Search xlsx
+
+SYNOPSIS
+    python cid_journey.py XLSX_FILE [--output FILE]
+
+DESCRIPTION
+    Reads a CID_Search output Excel file (produced by a CloudWatch Logs Insights
+    query exported via log_insights.py) and renders an interactive Cytoscape.js
+    HTML journey map showing the sequence of flow blocks a caller passed through.
+    Nodes are colour-coded by block type (decision, terminal, Lambda invoke, default),
+    repeated nodes are highlighted, and clicking a node shows the raw log row details
+    in a side panel. No AWS calls are made — processing is entirely local.
+
+OPTIONS
+    XLSX_FILE
+        Path to the CID_Search output xlsx file. Required.
+
+    --output FILE
+        Output HTML path. Default: <input_stem>_journey.html in the same directory.
+
+EXAMPLES
+    # Generate journey map with default output path
+    python cid_journey.py CID-abc123_2026-03-04.xlsx
+
+    # Write to a specific file
+    python cid_journey.py CID-abc123_2026-03-04.xlsx --output journey.html
+
+IAM PERMISSIONS
+    None — operates on local files only.
+
+NOTES
+    Expected columns in the xlsx: @timestamp, ContactId, ContactFlowName,
+    ContactFlowModuleType, Attribute, Value, Check, Results, Prompt, Operation,
+    Function, Parameters, External_Results. Missing columns generate a warning but
+    do not stop processing. Timing deltas between consecutive blocks are computed
+    and shown in the node detail panel.
+"""
+
 def parse_args():
     p = argparse.ArgumentParser(
         description="Render a Cytoscape.js caller journey map from a CID_Search xlsx.",
@@ -646,6 +686,9 @@ def parse_args():
 
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     args    = parse_args()
     in_path = Path(args.xlsx)
 

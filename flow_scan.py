@@ -27,6 +27,80 @@ except ImportError:
 
 RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 
+_MAN = """\
+NAME
+    flow_scan.py — Scan Amazon Connect contact flows for configuration issues
+
+SYNOPSIS
+    python flow_scan.py FLOW_JSON [OPTIONS]
+    python flow_scan.py --instance-id UUID --name NAME [OPTIONS]
+    python flow_scan.py --instance-id UUID --all [OPTIONS]
+
+DESCRIPTION
+    Checks contact flows for broken block references, dead-end blocks (no outgoing
+    transitions), missing error handlers on Lambda/queue blocks, missing default
+    branches on decision blocks, unreachable blocks, empty Lambda ARNs, and
+    unconfigured queues on SetQueue blocks. Can scan a local exported file, a
+    single flow from a live instance by name, or every flow in the instance at once.
+
+OPTIONS
+    FLOW_JSON
+        Local exported flow JSON file to scan (from export_flow.py).
+        Mutually exclusive with --all.
+
+    --instance-id UUID
+        Amazon Connect instance UUID. Required with --name or --all.
+
+    --name NAME
+        Flow name to scan from a live instance (case-insensitive substring match).
+
+    --all
+        Scan all flows in the instance. Mutually exclusive with FLOW_JSON.
+
+    --type TYPE
+        Filter by flow type when using --all (e.g. CONTACT_FLOW).
+
+    --detail
+        Show per-block breakdown in bulk (--all) mode. Without this flag only
+        a summary table is shown.
+
+    --json
+        Emit raw JSON with issue details.
+
+    --region REGION
+        AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
+
+    --profile NAME
+        AWS named profile for local development.
+
+EXAMPLES
+    # Scan a local exported file
+    python flow_scan.py flow.json
+
+    # Scan a single flow by name from a live instance
+    python flow_scan.py --instance-id <UUID> --name "Main IVR" --region us-east-1
+
+    # Scan every flow in the instance
+    python flow_scan.py --instance-id <UUID> --all
+
+    # Bulk scan with per-block detail for a specific type
+    python flow_scan.py --instance-id <UUID> --all --type CONTACT_FLOW --detail
+
+    # JSON output, filter flows with issues
+    python flow_scan.py --instance-id <UUID> --all --json | jq '.flows[] | select(.issue_count > 0)'
+
+IAM PERMISSIONS
+    connect:ListContactFlows
+    connect:DescribeContactFlow
+
+NOTES
+    Issue severities: ERROR (contact will break or get stuck) and WARN (potential
+    misconfiguration that may cause unexpected behaviour). In bulk mode, up to
+    all flows are scanned; large instances with hundreds of flows may take a minute.
+    If ct_snapshot.py has been used to build a snapshot, block identifiers are
+    resolved to human-readable names in the output.
+"""
+
 # ── Block classification ──────────────────────────────────────────────────────
 
 # Blocks that end the flow — no NextAction required
@@ -450,6 +524,9 @@ examples:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     args = parse_args()
 
     # ── Load snapshot for name resolution (optional) ─────────────────────────

@@ -14,6 +14,63 @@ from botocore.exceptions import ClientError
 
 RETRY_CONFIG = Config(retries={"max_attempts": 10, "mode": "adaptive"})
 
+_MAN = """\
+NAME
+    contacts_handled.py — Sum CONTACTS_HANDLED for a calendar month across an instance
+
+SYNOPSIS
+    python contacts_handled.py --instance-id UUID [OPTIONS]
+    python contacts_handled.py --instance-arn ARN  [OPTIONS]
+
+DESCRIPTION
+    Sums the CONTACTS_HANDLED metric across all queues in an Amazon Connect
+    instance for the previous calendar month (or a specified month). Uses
+    GetMetricDataV2, discovers all queue IDs automatically, and batches them
+    in groups of 100 to stay within API limits. Historical data is available
+    for approximately 3 months; requests outside that window exit with an error.
+
+OPTIONS
+    --instance-id UUID
+        Amazon Connect instance UUID. Mutually exclusive with --instance-arn.
+
+    --instance-arn ARN
+        Amazon Connect instance ARN. Mutually exclusive with --instance-id.
+
+    --region REGION
+        AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
+
+    --profile NAME
+        AWS named profile for local development.
+
+    --timezone TZ
+        Timezone for the aggregation window. Default: UTC.
+        Example: America/Chicago.
+
+    --month YYYY-MM
+        Month to report. Default: previous calendar month.
+
+EXAMPLES
+    # Previous month using instance UUID
+    python contacts_handled.py --instance-id <UUID>
+
+    # Using an instance ARN
+    python contacts_handled.py --instance-arn arn:aws:connect:us-west-2:123456789:instance/<UUID>
+
+    # Specific month, non-UTC timezone
+    python contacts_handled.py --instance-id <UUID> --region us-west-2 \\
+        --timezone America/Chicago --month 2026-02
+
+IAM PERMISSIONS
+    connect:DescribeInstance
+    connect:ListQueues
+    connect:GetMetricDataV2
+
+NOTES
+    GetMetricDataV2 retains historical data for approximately 93 days. Requesting
+    a month older than that will exit with an error and show the earliest queryable
+    month. The metric is summed over all STANDARD queues; AGENT queues are excluded.
+"""
+
 
 # ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -132,6 +189,9 @@ def get_contacts_handled(
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     p = argparse.ArgumentParser(
         description="Sum Amazon Connect Contacts Handled for the previous calendar month.",
         formatter_class=argparse.RawDescriptionHelpFormatter,

@@ -17,6 +17,64 @@ RETRY_CONFIG          = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 LENS_RETENTION_HOURS  = 24
 REFERENCE_TYPES       = ["URL", "ATTACHMENT", "CONTACT_ANALYSIS", "NUMBER", "STRING", "DATE"]
 
+_MAN = """\
+NAME
+    contact_diff.py — Side-by-side comparison of two Amazon Connect contacts
+
+SYNOPSIS
+    python contact_diff.py --instance-id UUID --contact-id-a UUID --contact-id-b UUID [OPTIONS]
+
+DESCRIPTION
+    Compares two contacts field-by-field: core metadata (channel, queue, agent,
+    duration, timestamps), custom contact attributes, and Contact Lens summaries
+    (sentiment, categories, issues). Matching fields are dimmed; differing fields
+    are highlighted. Use --all-attrs to see every attribute even when they match,
+    or --json for machine-readable diff output.
+
+OPTIONS
+    --instance-id UUID
+        Amazon Connect instance UUID. Required.
+
+    --contact-id-a UUID
+        First contact UUID (contact A). Required.
+
+    --contact-id-b UUID
+        Second contact UUID (contact B). Required.
+
+    --region REGION
+        AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
+
+    --profile NAME
+        AWS named profile for local development.
+
+    --all-attrs
+        Show all contact attributes, not just those that differ between the two contacts.
+
+    --json
+        Emit a single JSON document with raw contact data and the full diff table.
+
+EXAMPLES
+    # Human-readable side-by-side diff
+    python contact_diff.py --instance-id <UUID> --contact-id-a <UUID> --contact-id-b <UUID>
+
+    # Show all attributes (not just differing ones)
+    python contact_diff.py --instance-id <UUID> --contact-id-a <UUID> --contact-id-b <UUID> --all-attrs
+
+    # Raw JSON output
+    python contact_diff.py --instance-id <UUID> --contact-id-a <UUID> --contact-id-b <UUID> --json
+
+IAM PERMISSIONS
+    connect:DescribeContact
+    connect:GetContactAttributes
+    connect:ListRealtimeContactAnalysisSegments
+    connect:DescribeQueue
+    connect:DescribeUser
+
+NOTES
+    Contact Lens data has a 24-hour retention window. Expired contacts will show
+    "Expired (>24h)" in the Contact Lens section of the diff.
+"""
+
 _LW = 22   # label column width
 _VW = 24   # each value column width
 
@@ -427,6 +485,9 @@ def print_human(id_a, id_b, core_rows, attr_rows, lens_rows, all_attrs: bool):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     args   = parse_args()
     client = make_client(args.region, args.profile)
 

@@ -15,6 +15,68 @@ from botocore.exceptions import ClientError
 RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 LENS_RETENTION_HOURS = 24
 
+_MAN = """\
+NAME
+    contact_inspect.py — Pull all available data for a single Amazon Connect contact
+
+SYNOPSIS
+    python contact_inspect.py --instance-id UUID --contact-id UUID [OPTIONS]
+
+DESCRIPTION
+    Fetches core contact metadata, custom attributes, references, Contact Lens
+    transcript/sentiment/issues, and the full transfer chain for one contact ID.
+    All API failures degrade gracefully: missing sections are noted rather than
+    causing a crash. Use --json to merge all API responses into a single document
+    suitable for piping to jq.
+
+OPTIONS
+    --instance-id UUID
+        Amazon Connect instance UUID. Required.
+
+    --contact-id UUID
+        Contact UUID to inspect. Required.
+
+    --region REGION
+        AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
+
+    --profile NAME
+        AWS named profile for local development.
+
+    --transcript
+        Print all Contact Lens transcript turns (VOICE: timestamped turns,
+        CHAT/EMAIL: participant text). Without this flag only the turn count is shown.
+
+    --json
+        Emit a single JSON document containing all fetched data. Pipe-friendly.
+
+EXAMPLES
+    # Human-readable output
+    python contact_inspect.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
+
+    # Include full transcript turns
+    python contact_inspect.py --instance-id <UUID> --contact-id <UUID> --transcript
+
+    # Raw JSON, extract channel with jq
+    python contact_inspect.py --instance-id <UUID> --contact-id <UUID> --json | jq '.contact.Channel'
+
+    # With a named AWS profile (local dev)
+    python contact_inspect.py --instance-id <UUID> --contact-id <UUID> --profile my-admin
+
+IAM PERMISSIONS
+    connect:DescribeContact
+    connect:GetContactAttributes
+    connect:ListContactReferences
+    connect:ListRealtimeContactAnalysisSegments
+    connect:DescribeQueue
+    connect:DescribeUser
+
+NOTES
+    Contact Lens data has a 24-hour retention window. The tool detects expired
+    contacts and explains why rather than returning silently empty results.
+    The full transfer chain is reconstructed automatically by walking
+    PreviousContactId backwards from the given contact.
+"""
+
 # Max 6 reference types per ListContactReferences call
 REFERENCE_TYPES = ["URL", "ATTACHMENT", "CONTACT_ANALYSIS", "NUMBER", "STRING", "DATE"]
 
@@ -412,6 +474,9 @@ def print_human(contact, attributes, references, chain, lens_data, show_transcri
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     args = parse_args()
     client = make_client(args.region, args.profile)
 

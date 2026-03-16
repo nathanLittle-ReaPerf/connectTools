@@ -14,6 +14,85 @@ from botocore.exceptions import ClientError
 
 RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 
+_MAN = """\
+NAME
+    export_flow.py — Export an Amazon Connect contact flow to JSON by name
+
+SYNOPSIS
+    python export_flow.py --instance-id UUID --name NAME [OPTIONS]
+    python export_flow.py --instance-id UUID --list [OPTIONS]
+
+DESCRIPTION
+    Exports a contact flow's full JSON definition, identified by name or ARN.
+    The output is a self-describing envelope: {"metadata": {...}, "content": {...}}.
+    Use --list to browse available flows without exporting. If multiple flows match
+    the name, the tool lists them and exits rather than exporting ambiguously.
+    Compatible with flow_to_chart.py and flow_scan.py.
+
+OPTIONS
+    --instance-id UUID
+        Amazon Connect instance UUID. Required.
+
+    --name NAME
+        Flow name to search for. Case-insensitive substring match by default.
+        Mutually exclusive with --arn.
+
+    --arn ARN
+        Full or partial flow ARN. Exact match. Mutually exclusive with --name.
+
+    --exact
+        Require an exact name match (case-insensitive). No effect with --arn.
+
+    --type TYPE
+        Restrict search to one flow type. Choices: CONTACT_FLOW, CUSTOMER_QUEUE,
+        CUSTOMER_HOLD, CUSTOMER_WHISPER, AGENT_HOLD, AGENT_WHISPER,
+        OUTBOUND_WHISPER, AGENT_TRANSFER, QUEUE_TRANSFER, CAMPAIGN.
+
+    --output FILE
+        Write exported JSON to this file path. Mutually exclusive with --stdout.
+
+    --stdout
+        Print exported JSON to stdout. Mutually exclusive with --output.
+
+    --list
+        List matching flows without exporting. Can be combined with --name and --type.
+
+    --region REGION
+        AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
+
+    --profile NAME
+        AWS named profile for local development.
+
+EXAMPLES
+    # Export to <Flow Name>.json in the current directory
+    python export_flow.py --instance-id <UUID> --name "Main IVR" --region us-east-1
+
+    # Exact name match
+    python export_flow.py --instance-id <UUID> --name "Main IVR" --exact
+
+    # Write to a specific path
+    python export_flow.py --instance-id <UUID> --name "Main IVR" --output ./flows/main_ivr.json
+
+    # Print to stdout for piping
+    python export_flow.py --instance-id <UUID> --name "Main IVR" --stdout | jq '.metadata'
+
+    # List all flows
+    python export_flow.py --instance-id <UUID> --list
+
+    # List flows by type
+    python export_flow.py --instance-id <UUID> --list --name "IVR" --type CONTACT_FLOW
+
+IAM PERMISSIONS
+    connect:ListContactFlows
+    connect:DescribeContactFlow
+
+NOTES
+    When importing a flow into a different instance, every ARN in the content
+    block (queues, prompts, other flows) must be remapped to the target instance's
+    ARNs. The metadata envelope makes exported files self-describing without
+    having to parse the flow body.
+"""
+
 FLOW_TYPES = [
     "CONTACT_FLOW",
     "CUSTOMER_QUEUE",
@@ -220,6 +299,9 @@ def print_flow_list(flows):
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     args = parse_args()
     client = make_client(args.region, args.profile)
 

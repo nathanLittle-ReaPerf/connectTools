@@ -24,6 +24,91 @@ RETRY_CONFIG         = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 _LAMBDA_MODULE_TYPES = {"InvokeExternalResource", "InvokeLambdaFunction"}
 _MAX_DISPLAY         = 15   # max contact IDs shown per error group in human output
 
+_MAN = """\
+NAME
+    lambda_errors.py — Aggregate Lambda errors across contacts for a given function
+
+SYNOPSIS
+    python lambda_errors.py --instance-id UUID --function NAME [OPTIONS]
+
+DESCRIPTION
+    Scans Connect flow-execution logs in CloudWatch over a time window, finds every
+    invocation of the specified Lambda function (matched by name or ARN fragment),
+    and groups results by error type. Shows which contacts were affected, how many
+    errors occurred per type, and the success rate. Use --csv for a per-invocation
+    export or --json for machine-readable aggregated output.
+
+OPTIONS
+    --instance-id UUID
+        Amazon Connect instance UUID. Required.
+
+    --function NAME
+        Lambda function name or ARN fragment to match (case-insensitive substring). Required.
+
+    --region REGION
+        AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
+
+    --profile NAME
+        AWS named profile for local development.
+
+    --log-group NAME
+        Override the auto-discovered Connect CloudWatch log group.
+        Default: /aws/connect/<instance-alias>.
+
+    --period PERIOD
+        Named time period shortcut. Choices:
+          today, yesterday, this-week, last-week, this-month, last-month.
+        Mutually exclusive with --last and --start.
+
+    --last DURATION
+        Relative time window ending now. Examples: 30m, 4h, 7d.
+        Mutually exclusive with --period and --start.
+
+    --start YYYY-MM-DD[THH:MM:SS]
+        Absolute window start. Requires --end (defaults to now if omitted).
+        Mutually exclusive with --period and --last.
+
+    --end YYYY-MM-DD[THH:MM:SS]
+        Absolute window end. Default: now. Used with --start.
+
+    --json
+        Emit raw JSON with summary and full invocation list.
+
+    --csv FILE
+        Write per-invocation CSV to a file.
+
+EXAMPLES
+    # Errors for the last 24 hours (default window)
+    python lambda_errors.py --instance-id <UUID> --function my-auth-function --region us-east-1
+
+    # Yesterday's errors
+    python lambda_errors.py --instance-id <UUID> --function my-auth-function --period yesterday
+
+    # Last week
+    python lambda_errors.py --instance-id <UUID> --function my-auth-function --period last-week
+
+    # Custom relative window
+    python lambda_errors.py --instance-id <UUID> --function my-auth-function --last 4h
+
+    # Absolute date range, export CSV
+    python lambda_errors.py --instance-id <UUID> --function my-auth-function \\
+        --start 2026-03-15 --end 2026-03-16 --csv errors.csv
+
+    # JSON output
+    python lambda_errors.py --instance-id <UUID> --function my-auth-function \\
+        --json | jq '.errors'
+
+IAM PERMISSIONS
+    connect:DescribeInstance
+    logs:FilterLogEvents (on /aws/connect/<instance-alias>)
+
+NOTES
+    The function filter is a case-insensitive substring match against the full
+    Lambda ARN. Up to 15 contact IDs are shown per error type in human output;
+    use --csv or --json to see all. The default time window is the last 24 hours
+    if no period, --last, or --start flag is given.
+"""
+
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 
@@ -401,6 +486,9 @@ def write_csv(invocations: list, path: str):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     args = parse_args()
     connect, logs_client = make_clients(args.region, args.profile)
     start_dt, end_dt     = parse_window(args)

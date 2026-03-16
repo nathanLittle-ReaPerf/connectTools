@@ -275,9 +275,94 @@ examples:
     return p.parse_args()
 
 
+_MAN = """\
+NAME
+    log_insights.py — Query CloudWatch Logs Insights and export results to Excel
+
+SYNOPSIS
+    python log_insights.py --query FILE (--last DURATION | --start DATE) [OPTIONS]
+    python log_insights.py --list-logs
+
+DESCRIPTION
+    Runs a CloudWatch Logs Insights query against an Amazon Connect log group
+    (auto-discovered under /aws/connect/ or specified explicitly) and exports
+    the results to an Excel (.xlsx) file with a styled header row and auto-fitted
+    column widths. The query file can contain {KEY} placeholders substituted at
+    runtime with --var KEY=VALUE. Requires openpyxl (installed by connectToolbox.py).
+
+OPTIONS
+    --query FILE
+        Logs Insights query file (.sql or .txt). Required unless --list-logs is used.
+
+    --log-group NAME
+        Log group name. Auto-discovers /aws/connect/* log groups if omitted.
+        When multiple are found, an interactive prompt asks which to use.
+
+    --last DURATION
+        Relative time range ending now. Examples: 24h, 7d, 30m, 2w.
+        Mutually exclusive with --start.
+
+    --start DATETIME
+        Start datetime: YYYY-MM-DD or 'YYYY-MM-DD HH:MM' (UTC).
+        Mutually exclusive with --last.
+
+    --end DATETIME
+        End datetime. Default: now. Used with --start.
+
+    --limit N
+        Maximum rows returned. Default: 1000. Maximum: 10000.
+
+    --output FILE
+        Output .xlsx path. Default: results_<timestamp>.xlsx.
+
+    --var KEY=VALUE
+        Substitute a {KEY} placeholder in the query string (repeatable).
+
+    --list-logs
+        List /aws/connect/ log groups and exit. No query is run.
+
+    --region REGION
+        AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
+
+    --profile NAME
+        AWS named profile for local development.
+
+EXAMPLES
+    # Last 24 hours, auto-detect log group
+    python log_insights.py --query call_report.sql --last 24h
+
+    # Specific date range
+    python log_insights.py --query call_report.sql --start 2026-03-01 --end 2026-03-02
+
+    # Specify log group and output file
+    python log_insights.py --query call_report.sql --last 7d \\
+        --log-group /aws/connect/myinstance --output march.xlsx
+
+    # Substitute a placeholder in the query
+    python log_insights.py --query report.sql --last 24h --var ContactId=abc-123
+
+    # List available Connect log groups
+    python log_insights.py --list-logs
+
+IAM PERMISSIONS
+    logs:StartQuery
+    logs:GetQueryResults
+    logs:StopQuery
+    logs:DescribeLogGroups
+
+NOTES
+    The query is polled every 2 seconds until complete. If the log group is
+    ambiguous (multiple /aws/connect/* groups exist), the tool prompts
+    interactively for a selection. The --limit default of 1000 matches the
+    CloudWatch Logs Insights default; raise it up to 10000 for larger exports.
+"""
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     args = parse_args()
 
     if not HAS_OPENPYXL:

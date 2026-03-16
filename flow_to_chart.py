@@ -695,6 +695,62 @@ def to_dot(nodes, edges, start_id, flow_name):
     return "\n".join(lines)
 
 
+_MAN = """\
+NAME
+    flow_to_chart.py — Convert an exported Amazon Connect contact flow to a flowchart
+
+SYNOPSIS
+    python flow_to_chart.py FLOW_JSON [--format FORMAT] [--output FILE | --stdout]
+
+DESCRIPTION
+    Reads a contact flow JSON file (exported by export_flow.py or raw flow content)
+    and generates a flowchart in Mermaid (default), self-contained HTML, or Graphviz
+    DOT format. No AWS calls are made — all processing is done locally from the
+    exported JSON. The HTML output uses Cytoscape.js with node sizing, text wrapping,
+    a pan/zoom canvas, and a Colors panel for theming.
+
+OPTIONS
+    FLOW_JSON
+        Path to the exported flow JSON file. Accepts export_flow.py envelope format
+        ({"metadata": ..., "content": ...}) or raw flow content JSON.
+
+    --format FORMAT
+        Output format. Default: mermaid.
+        Choices: mermaid, html, dot.
+
+    --output FILE
+        Output file path. Mutually exclusive with --stdout.
+        Default: <flow_name>.<ext> where ext is .md, .html, or .dot.
+
+    --stdout
+        Print the chart to stdout instead of writing a file.
+
+EXAMPLES
+    # Mermaid output (paste into mermaid.live or GitHub)
+    python flow_to_chart.py Main_IVR.json
+
+    # Self-contained HTML — open in any browser
+    python flow_to_chart.py Main_IVR.json --format html
+
+    # Graphviz DOT — render to PNG
+    python flow_to_chart.py Main_IVR.json --format dot
+    dot -Tpng Main_IVR.dot -o Main_IVR.png
+
+    # Full pipeline from live instance
+    python export_flow.py --instance-id <UUID> --name "Main IVR" --output Main_IVR.json
+    python flow_to_chart.py Main_IVR.json --format html
+
+IAM PERMISSIONS
+    None — operates on local files only.
+
+NOTES
+    Node shapes: rectangle for standard actions, diamond for branching actions
+    (Check Attribute, Get Input, Check Hours), oval for terminal actions
+    (Disconnect, Transfer to Queue). Edge labels show condition values and error
+    types. Action Identifier fields may be human-readable names rather than UUIDs;
+    the tool handles both safely.
+"""
+
 # ── Argument parsing ──────────────────────────────────────────────────────────
 
 DEFAULT_EXT = {"mermaid": ".md", "html": ".html", "dot": ".dot"}
@@ -732,6 +788,9 @@ examples:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     args = parse_args()
 
     # Load file

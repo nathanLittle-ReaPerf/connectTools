@@ -171,9 +171,80 @@ def write_csv(path: Path, rows: list[dict]):
         writer.writerows(rows)
 
 
+_MAN = """\
+NAME
+    agent_list.py — List agents in an Amazon Connect instance
+
+SYNOPSIS
+    python agent_list.py --instance-id UUID [OPTIONS]
+
+DESCRIPTION
+    Lists all agents (users) in an Amazon Connect instance with their username,
+    first/last name, routing profile, hierarchy group, and security profiles.
+    Resolves routing profile, hierarchy group, and security profile names via
+    describe calls with local caches to minimise API requests. Use --search to
+    filter by username substring, --routing-profile to filter by routing profile
+    name, --csv to export to file, or --json for machine-readable output.
+
+OPTIONS
+    --instance-id UUID
+        Amazon Connect instance UUID. Required.
+
+    --search TEXT
+        Case-insensitive substring match on username.
+
+    --routing-profile NAME
+        Filter by routing profile name (case-insensitive substring).
+        Applied after fetching user details.
+
+    --region REGION
+        AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
+
+    --profile NAME
+        AWS named profile for local development.
+
+    --csv PATH
+        Write results to a CSV file.
+
+    --json
+        Print results as JSON (pipe-friendly).
+
+EXAMPLES
+    # List all agents (table output)
+    python agent_list.py --instance-id <UUID>
+
+    # Search by username
+    python agent_list.py --instance-id <UUID> --search jsmith
+
+    # Filter by routing profile
+    python agent_list.py --instance-id <UUID> --routing-profile "Basic Routing"
+
+    # Export to CSV
+    python agent_list.py --instance-id <UUID> --csv agents.csv
+
+    # JSON output, extract usernames
+    python agent_list.py --instance-id <UUID> --json | jq '.[].Username'
+
+IAM PERMISSIONS
+    connect:ListUsers
+    connect:DescribeUser
+    connect:DescribeRoutingProfile
+    connect:DescribeUserHierarchyGroup
+    connect:DescribeSecurityProfile
+
+NOTES
+    Routing profile, hierarchy group, and security profile names are resolved
+    using local caches to avoid redundant API calls for users sharing the same
+    profile. The --routing-profile filter is applied client-side after all user
+    details have been fetched.
+"""
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
+    if "--man" in sys.argv:
+        print(_MAN)
+        sys.exit(0)
     p = argparse.ArgumentParser(
         description="List agents in an Amazon Connect instance.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
