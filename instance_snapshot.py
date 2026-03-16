@@ -113,7 +113,7 @@ def fetch_queues(client, instance_id) -> dict:
         i["Id"]: {
             "id":   i["Id"],
             "arn":  i.get("Arn", ""),
-            "name": i["Name"],
+            "name": i.get("Name", ""),
             "type": i.get("QueueType", ""),
         }
         for i in items
@@ -127,7 +127,7 @@ def fetch_flows(client, instance_id) -> dict:
         i["Id"]: {
             "id":     i["Id"],
             "arn":    i.get("Arn", ""),
-            "name":   i["Name"],
+            "name":   i.get("Name", ""),
             "type":   i.get("ContactFlowType", ""),
             "status": i.get("ContactFlowStatus", ""),
             "state":  i.get("ContactFlowState", ""),
@@ -140,7 +140,7 @@ def fetch_routing_profiles(client, instance_id) -> dict:
     items = _paginate(client, "list_routing_profiles", "RoutingProfileSummaryList",
                       InstanceId=instance_id, MaxResults=100)
     return {
-        i["Id"]: {"id": i["Id"], "arn": i.get("Arn", ""), "name": i["Name"]}
+        i["Id"]: {"id": i["Id"], "arn": i.get("Arn", ""), "name": i.get("Name", "")}
         for i in items
     }
 
@@ -149,7 +149,7 @@ def fetch_hours(client, instance_id) -> dict:
     items = _paginate(client, "list_hours_of_operations", "HoursOfOperationSummaryList",
                       InstanceId=instance_id, MaxResults=100)
     return {
-        i["Id"]: {"id": i["Id"], "arn": i.get("Arn", ""), "name": i["Name"]}
+        i["Id"]: {"id": i["Id"], "arn": i.get("Arn", ""), "name": i.get("Name", "")}
         for i in items
     }
 
@@ -158,7 +158,7 @@ def fetch_prompts(client, instance_id) -> dict:
     items = _paginate(client, "list_prompts", "PromptSummaryList",
                       InstanceId=instance_id, MaxResults=100)
     return {
-        i["Id"]: {"id": i["Id"], "arn": i.get("Arn", ""), "name": i["Name"]}
+        i["Id"]: {"id": i["Id"], "arn": i.get("Arn", ""), "name": i.get("Name", "")}
         for i in items
     }
 
@@ -170,7 +170,7 @@ def fetch_quick_connects(client, instance_id) -> dict:
         i["Id"]: {
             "id":   i["Id"],
             "arn":  i.get("Arn", ""),
-            "name": i["Name"],
+            "name": i.get("Name", ""),
             "type": i.get("QuickConnectType", ""),
         }
         for i in items
@@ -181,7 +181,7 @@ def fetch_security_profiles(client, instance_id) -> dict:
     items = _paginate(client, "list_security_profiles", "SecurityProfileSummaryList",
                       InstanceId=instance_id, MaxResults=100)
     return {
-        i["Id"]: {"id": i["Id"], "arn": i.get("Arn", ""), "name": i["Name"]}
+        i["Id"]: {"id": i["Id"], "arn": i.get("Arn", ""), "name": i.get("Name", "")}
         for i in items
     }
 
@@ -209,8 +209,8 @@ def fetch_users(client, instance_id) -> dict:
         i["Id"]: {
             "id":       i["Id"],
             "arn":      i.get("Arn", ""),
-            "username": i["Username"],
-            "name":     i["Username"],   # fallback; full name requires DescribeUser
+            "username": i.get("Username", ""),
+            "name":     i.get("Username", ""),   # fallback; full name requires DescribeUser
         }
         for i in items
     }
