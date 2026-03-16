@@ -18,6 +18,8 @@ import sys
 from collections import defaultdict
 
 import boto3
+
+import ct_snapshot
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
@@ -598,8 +600,9 @@ def main():
                     start_dt, end_dt, lambda_log_group, connect_log_group)
 
     if args.csv:
-        write_csv(all_errors, args.csv)
-        print(f"  Saved → {args.csv}", file=sys.stderr)
+        csv_path = ct_snapshot.output_path("lambda_errors", args.csv)
+        write_csv(all_errors, csv_path)
+        print(f"  Saved → {csv_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":

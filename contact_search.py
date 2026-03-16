@@ -14,6 +14,8 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+import ct_snapshot
+
 RETRY_CONFIG = Config(retries={"max_attempts": 10, "mode": "adaptive"})
 
 _MAN = """\
@@ -448,9 +450,12 @@ def main():
         print(json.dumps(contacts, indent=2, default=serial))
         return
 
-    timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d_%H%M%S")
-    out_path  = args.output or f"contacts_{timestamp}.csv"
-    n         = write_csv(contacts, out_path)
+    timestamp    = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d_%H%M%S")
+    default_name = f"contacts_{timestamp}.csv"
+    out_path     = (ct_snapshot.output_path("contact_search", args.output)
+                    if args.output
+                    else ct_snapshot.output_dir("contact_search") / default_name)
+    n            = write_csv(contacts, out_path)
     print(f"Exported {n:,} contact(s) → {out_path}")
 
 

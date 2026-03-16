@@ -12,6 +12,8 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+import ct_snapshot
+
 RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 
 _MAN = """\
@@ -325,9 +327,10 @@ def main():
         if args.stdout:
             print(json.dumps(flows, indent=2, default=str))
         elif args.output:
-            with open(args.output, "w", encoding="utf-8") as f:
+            list_path = ct_snapshot.output_path("export_flow", args.output)
+            with open(list_path, "w", encoding="utf-8") as f:
                 json.dump(flows, f, indent=2, default=str)
-            print(f"{label} → {args.output}")
+            print(f"{label} → {list_path}")
         else:
             print(label)
             print()
@@ -370,7 +373,10 @@ def main():
     # Determine output destination
     to_stdout = args.stdout
     if not to_stdout:
-        output_path = args.output or safe_filename(flow_def["Name"])
+        default_name = safe_filename(flow_def["Name"])
+        output_path  = (ct_snapshot.output_path("export_flow", args.output)
+                        if args.output
+                        else ct_snapshot.output_dir("export_flow") / default_name)
     else:
         output_path = None
 

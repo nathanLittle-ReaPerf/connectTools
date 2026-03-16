@@ -18,6 +18,8 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+import ct_snapshot
+
 RETRY_CONFIG         = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 LENS_RETENTION_HOURS = 24
 
@@ -642,9 +644,10 @@ def main():
         }
         out = json.dumps(doc, indent=2, default=serial)
         if args.output:
-            with open(args.output, "w", encoding="utf-8") as f:
+            dest = ct_snapshot.output_path("contact_timeline", args.output)
+            with open(dest, "w", encoding="utf-8") as f:
                 f.write(out)
-            print(f"  Saved → {args.output}", file=sys.stderr)
+            print(f"  Saved → {dest}", file=sys.stderr)
         else:
             print(out)
     else:

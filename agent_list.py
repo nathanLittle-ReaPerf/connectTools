@@ -13,6 +13,8 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+import ct_snapshot
+
 RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 
 CSV_COLUMNS = [
@@ -295,8 +297,9 @@ examples:
         return
 
     if args.csv_path:
-        write_csv(Path(args.csv_path), rows)
-        print(f"Wrote {len(rows)} rows -> {args.csv_path}")
+        csv_dest = ct_snapshot.output_path("agent_list", args.csv_path)
+        write_csv(csv_dest, rows)
+        print(f"Wrote {len(rows)} rows → {csv_dest}")
         return
 
     print_table(rows)

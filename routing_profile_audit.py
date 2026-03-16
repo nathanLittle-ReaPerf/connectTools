@@ -17,6 +17,8 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+import ct_snapshot
+
 RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 
 _MAN = """\
@@ -430,7 +432,7 @@ def main():
         out = {k: v for k, v in report.items() if k != "all_queue_map"}
         print(json.dumps(out, indent=2, default=serial))
     elif args.csv:
-        write_csv(report, args.csv)
+        write_csv(report, ct_snapshot.output_path("routing_profile_audit", args.csv))
     else:
         print_human(report, args.instance_id)
 

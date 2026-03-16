@@ -17,6 +17,8 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+import ct_snapshot
+
 RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 
 # Seconds either side of the Connect-reported invocation time to search Lambda logs
@@ -377,11 +379,12 @@ def drill_down_loop(logs_client, invocations_with_logs):
 
         # Offer to save to file
         try:
-            dest = input("  Save to file? Enter filename (or Enter to skip): ").strip()
+            dest = input(f"  Save to file? Enter filename (or Enter to skip) [~/.connecttools/lambda_tracer/]: ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
         if dest:
+            dest = str(ct_snapshot.output_path("lambda_tracer", dest))
             def serial(o):
                 return o.isoformat() if hasattr(o, "isoformat") else str(o)
             doc = {
@@ -492,9 +495,10 @@ def main():
         }
         out = json.dumps(doc, indent=2, default=serial)
         if args.output:
-            with open(args.output, "w", encoding="utf-8") as f:
+            dest = ct_snapshot.output_path("lambda_tracer", args.output)
+            with open(dest, "w", encoding="utf-8") as f:
                 f.write(out)
-            print(f"  Saved → {args.output}", file=sys.stderr)
+            print(f"  Saved → {dest}", file=sys.stderr)
         else:
             print(out)
     else:

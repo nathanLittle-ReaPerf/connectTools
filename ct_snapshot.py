@@ -110,3 +110,26 @@ def counts(snapshot: dict) -> dict:
     """Return {resource_type: count} for all resource types in the snapshot."""
     skip = {"instance_id", "instance_alias", "fetched_at", "region"}
     return {k: len(v) for k, v in snapshot.items() if k not in skip and isinstance(v, dict)}
+
+
+# ── Per-tool output directories ────────────────────────────────────────────────
+
+def output_dir(tool_name: str) -> Path:
+    """Return (and create if needed) ~/.connecttools/<tool_name>/."""
+    d = SNAPSHOT_DIR / tool_name
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def output_path(tool_name: str, filename: str) -> Path:
+    """Resolve an output file path.
+
+    If filename has no directory component (just a bare name), places it in
+    ~/.connecttools/<tool_name>/. Otherwise expands ~ and returns as-is,
+    so explicit paths like ~/my-dir/file.csv or /tmp/file.csv are honoured.
+    """
+    p = Path(filename).expanduser()
+    if p.parent == Path("."):
+        return output_dir(tool_name) / p.name
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p

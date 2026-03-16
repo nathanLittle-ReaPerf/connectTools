@@ -13,6 +13,8 @@ import re
 import sys
 from pathlib import Path
 
+import ct_snapshot
+
 
 # ── Action type metadata ──────────────────────────────────────────────────────
 
@@ -838,9 +840,10 @@ def main():
         print(output)
         return
 
-    out_path = args.output or (
-        re.sub(r"[^\w\-]", "_", flow_name).strip("_") + DEFAULT_EXT[args.format]
-    )
+    default_name = re.sub(r"[^\w\-]", "_", flow_name).strip("_") + DEFAULT_EXT[args.format]
+    out_path = (ct_snapshot.output_path("flow_to_chart", args.output)
+                if args.output
+                else ct_snapshot.output_dir("flow_to_chart") / default_name)
 
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(output)
