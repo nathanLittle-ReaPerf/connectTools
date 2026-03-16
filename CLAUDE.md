@@ -93,7 +93,8 @@ python lambda_errors.py --instance-id <UUID> --function my-auth-function --json 
 
 **Key behaviors:**
 - `--function` is matched as a case-insensitive substring of the Lambda ARN in each log entry — can be a full ARN, function name, or partial name
-- `--last` accepts `30m`, `4h`, `7d`, etc. (default: `24h`); `--start`/`--end` take `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`
+- `--period` accepts `today`, `yesterday`, `this-week`, `last-week`, `this-month`, `last-month`
+- `--last` accepts `30m`, `4h`, `7d`, etc.; `--start`/`--end` take `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`; default is `24h` if none specified
 - Human output shows up to 15 contact IDs per error type; `--csv` / `--json` include all
 - Errors are sorted by frequency (most common first)
 - `--csv` columns: timestamp, contact_id, function_name, function_arn, flow_name, result, error_type

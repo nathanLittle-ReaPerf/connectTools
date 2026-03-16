@@ -385,11 +385,34 @@ CONTACT_INSPECT_QUESTIONS = [
     {"label": "Include full transcript?", "arg": "--transcript", "type": "bool"},
 ]
 
-LAMBDA_ERRORS_QUESTIONS = [
-    {"label": "Lambda function name or ARN fragment", "arg": "--function", "required": True},
-    {"label": "Window (e.g. 4h, 7d — leave blank for 24h)", "arg": "--last", "required": False, "default": "24h"},
-    {"label": "CSV output file (leave blank to print)", "arg": "--csv", "required": False},
-]
+_LAMBDA_ERRORS_PERIODS = ["today", "yesterday", "this-week", "last-week",
+                          "this-month", "last-month", "custom"]
+
+def tool_lambda_errors():
+    _header("Lambda Error Aggregator")
+    iid, region, profile = ask_connect_defaults()
+    fn = ask("Lambda function name or ARN fragment")
+
+    period_choice = ask_choice("Time window", _LAMBDA_ERRORS_PERIODS, default="yesterday")
+
+    args = connect_args(iid, region, profile) + ["--function", fn]
+
+    if period_choice == "custom":
+        last = ask("Duration (e.g. 4h, 7d) or leave blank for --start/--end", required=False)
+        if last:
+            args += ["--last", last]
+        else:
+            start = ask("Start (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)")
+            end   = ask("End   (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)", required=False)
+            args += ["--start", start]
+            if end: args += ["--end", end]
+    else:
+        args += ["--period", period_choice]
+
+    csv_out = ask("CSV output file (leave blank to print)", required=False)
+    if csv_out: args += ["--csv", csv_out]
+
+    _run("lambda_errors.py", args)
 
 CONTACT_TIMELINE_QUESTIONS = [
     {"label": "Contact ID", "arg": "--contact-id", "required": True},
@@ -491,13 +514,6 @@ def tool_contacts_handled():
 
 def tool_contact_inspect():
     tool_runner("Contact Inspect", "contact_inspect.py", CONTACT_INSPECT_QUESTIONS)
-
-
-# ── Tool: Lambda Errors ───────────────────────────────────────────────────────
-
-
-def tool_lambda_errors():
-    tool_runner("Lambda Error Aggregator", "lambda_errors.py", LAMBDA_ERRORS_QUESTIONS)
 
 
 # ── Tool: Contact Timeline ────────────────────────────────────────────────────

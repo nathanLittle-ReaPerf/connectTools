@@ -34,6 +34,8 @@ def parse_args():
         epilog="""
 examples:
   %(prog)s --instance-id <UUID> --function my-auth-function --region us-east-1
+  %(prog)s --instance-id <UUID> --function my-auth-function --period yesterday
+  %(prog)s --instance-id <UUID> --function my-auth-function --period last-week
   %(prog)s --instance-id <UUID> --function my-auth-function --last 4h
   %(prog)s --instance-id <UUID> --function my-auth-function --start 2026-03-15 --end 2026-03-16
   %(prog)s --instance-id <UUID> --function my-auth-function --csv errors.csv
@@ -47,14 +49,18 @@ examples:
     p.add_argument("--profile",   default=None,  help="AWS named profile")
     p.add_argument("--log-group", default=None,  metavar="NAME",
                    help="Override auto-discovered Connect log group")
-    # Time window — mutually exclusive groups
+    # Time window — mutually exclusive
     tg = p.add_mutually_exclusive_group()
-    tg.add_argument("--last",  default="24h", metavar="DURATION",
-                    help="Relative window: 30m, 4h, 7d  (default: 24h)")
-    tg.add_argument("--start", default=None,  metavar="YYYY-MM-DD[THH:MM:SS]",
+    tg.add_argument("--period", default=None,
+                    choices=["today", "yesterday", "this-week", "last-week",
+                             "this-month", "last-month"],
+                    help="Named period shortcut")
+    tg.add_argument("--last",  default=None, metavar="DURATION",
+                    help="Relative window: 30m, 4h, 7d")
+    tg.add_argument("--start", default=None, metavar="YYYY-MM-DD[THH:MM:SS]",
                     help="Absolute window start (requires --end)")
-    p.add_argument("--end",    default=None,  metavar="YYYY-MM-DD[THH:MM:SS]",
-                   help="Absolute window end  (default: now)")
+    p.add_argument("--end",    default=None, metavar="YYYY-MM-DD[THH:MM:SS]",
+                   help="Absolute window end (default: now)")
     # Output
     p.add_argument("--json", action="store_true", dest="output_json",
                    help="Emit raw JSON (pipe-friendly)")
@@ -75,9 +81,48 @@ def parse_duration(s: str) -> dt.timedelta:
             "h": dt.timedelta(hours=n),   "d": dt.timedelta(days=n)}[unit]
 
 
+def _named_period(period: str) -> tuple:
+    """Resolve a named period string to (start_dt, end_dt) in UTC."""
+    now   = dt.datetime.now(dt.timezone.utc)
+    today = now.date()
+
+    if period == "today":
+        start = dt.datetime(today.year, today.month, today.day, tzinfo=dt.timezone.utc)
+        return start, now
+    if period == "yesterday":
+        d = today - dt.timedelta(days=1)
+        start = dt.datetime(d.year, d.month, d.day, tzinfo=dt.timezone.utc)
+        end   = dt.datetime(today.year, today.month, today.day, tzinfo=dt.timezone.utc)
+        return start, end
+    if period == "this-week":
+        d = today - dt.timedelta(days=today.weekday())   # Monday
+        start = dt.datetime(d.year, d.month, d.day, tzinfo=dt.timezone.utc)
+        return start, now
+    if period == "last-week":
+        d     = today - dt.timedelta(days=today.weekday())  # this Monday
+        end_d = d
+        start_d = d - dt.timedelta(weeks=1)
+        return (dt.datetime(start_d.year, start_d.month, start_d.day, tzinfo=dt.timezone.utc),
+                dt.datetime(end_d.year,   end_d.month,   end_d.day,   tzinfo=dt.timezone.utc))
+    if period == "this-month":
+        start = dt.datetime(today.year, today.month, 1, tzinfo=dt.timezone.utc)
+        return start, now
+    if period == "last-month":
+        first_this = dt.date(today.year, today.month, 1)
+        last_month = first_this - dt.timedelta(days=1)
+        start = dt.datetime(last_month.year, last_month.month, 1, tzinfo=dt.timezone.utc)
+        end   = dt.datetime(first_this.year, first_this.month, first_this.day, tzinfo=dt.timezone.utc)
+        return start, end
+    raise ValueError(f"Unknown period: {period!r}")
+
+
 def parse_window(args) -> tuple:
     """Return (start_dt, end_dt) as UTC-aware datetimes."""
     now = dt.datetime.now(dt.timezone.utc)
+
+    if args.period:
+        return _named_period(args.period)
+
     if args.start:
         try:
             start = dt.datetime.fromisoformat(args.start)
@@ -96,11 +141,11 @@ def parse_window(args) -> tuple:
                 end = end.replace(tzinfo=dt.timezone.utc)
         else:
             end = now
-    else:
-        delta = parse_duration(args.last)
-        start = now - delta
-        end   = now
-    return start, end
+        return start, end
+
+    # --last or default 24h
+    delta = parse_duration(args.last or "24h")
+    return now - delta, now
 
 
 # ── Client factory ────────────────────────────────────────────────────────────
