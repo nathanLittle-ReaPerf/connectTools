@@ -724,6 +724,30 @@ def tool_flow_usage():
     _run("flow_usage.py", args)
 
 
+# ── Tool: Flow Compare ────────────────────────────────────────────────────────
+
+def tool_flow_compare():
+    _header("Flow Compare")
+    left  = ask("Left (older) flow JSON file")
+    right = ask("Right (newer) flow JSON file")
+    _run("flow_compare.py", [left, right])
+
+
+# ── Tool: Orphaned Resources ──────────────────────────────────────────────────
+
+def tool_orphaned_resources():
+    _header("Orphaned Resources")
+    iid, region, profile = ask_connect_defaults()
+    check_lambdas = ask_bool("Verify Lambda ARNs exist? (requires lambda:GetFunction)")
+    csv_out       = ask("CSV output file (leave blank to print)", required=False)
+
+    args = connect_args(iid, region, profile)
+    if check_lambdas: args += ["--check-lambdas"]
+    if csv_out:       args += ["--csv", csv_out]
+
+    _run("orphaned_resources.py", args)
+
+
 # ── Tool: Log Insights ────────────────────────────────────────────────────────
 
 def _list_queries() -> list[Path]:
@@ -1031,10 +1055,12 @@ GROUPS = [
         ("Lambda Errors",      tool_lambda_errors,     "Aggregate Lambda errors across all contacts for a function and time window"),
     ]),
     ("Flows", [
-        ("Flow Scan",          tool_flow_scan,         "Scan flows for broken references, dead ends, missing error handlers"),
-        ("Flow Usage",         tool_flow_usage,        "Count how many contacts or invocations hit each flow over a time window"),
-        ("Export Flow",        tool_export_flow,       "Export a contact flow definition to JSON by name"),
-        ("Flow to Chart",      tool_flow_to_chart,     "Convert an exported flow JSON to a visual flowchart"),
+        ("Flow Scan",           tool_flow_scan,           "Scan flows for broken references, dead ends, missing error handlers"),
+        ("Flow Usage",          tool_flow_usage,          "Count how many contacts or invocations hit each flow over a time window"),
+        ("Flow Compare",        tool_flow_compare,        "Diff two exported flow JSONs: added, removed, and modified blocks"),
+        ("Orphaned Resources",  tool_orphaned_resources,  "Find flows, queues, prompts, and hours not referenced by any flow"),
+        ("Export Flow",         tool_export_flow,         "Export a contact flow definition to JSON by name"),
+        ("Flow to Chart",       tool_flow_to_chart,       "Convert an exported flow JSON to a visual flowchart"),
     ]),
     ("Log Insights", [
         ("Log Insights",       tool_log_insights,      "Run CloudWatch Logs Insights queries with variable substitution"),

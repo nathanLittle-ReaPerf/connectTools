@@ -46,8 +46,10 @@ The menu is two levels: pick a **group**, then pick a **tool** within it. Press 
 |---|---|---|
 | 1 | Flow Scan | `flow_scan.py` |
 | 2 | Flow Usage | `flow_usage.py` |
-| 3 | Export Flow | `export_flow.py` |
-| 4 | Flow to Chart | `flow_to_chart.py` |
+| 3 | Flow Compare | `flow_compare.py` |
+| 4 | Orphaned Resources | `orphaned_resources.py` |
+| 5 | Export Flow | `export_flow.py` |
+| 6 | Flow to Chart | `flow_to_chart.py` |
 
 ### Log Insights
 | # | Tool | Script |
@@ -76,6 +78,10 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 **Flow Scan** — Instance ID, Region, Flow name (or blank for all), Flow type filter, Show per-block detail (y/n)
 
 **Flow Usage** — Instance ID, Region, Count by (contacts / invocations), Flow name filter, Time window (7d default / 24h / 30d / custom), Output CSV
+
+**Flow Compare** — Left (older) flow JSON file path, Right (newer) flow JSON file path
+
+**Orphaned Resources** — Instance ID, Region, Verify Lambda ARNs (y/n), Output CSV
 
 **Export Flow** — Instance ID, Region, optionally list flows first, Flow name, Exact match (y/n), Output file
 
