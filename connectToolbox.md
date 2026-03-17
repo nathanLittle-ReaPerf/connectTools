@@ -44,8 +44,10 @@ The menu is two levels: pick a **group**, then pick a **tool** within it. Press 
 ### Flows
 | # | Tool | Script |
 |---|---|---|
-| 1 | Export Flow | `export_flow.py` |
-| 2 | Flow to Chart | `flow_to_chart.py` |
+| 1 | Flow Scan | `flow_scan.py` |
+| 2 | Flow Usage | `flow_usage.py` |
+| 3 | Export Flow | `export_flow.py` |
+| 4 | Flow to Chart | `flow_to_chart.py` |
 
 ### Log Insights
 | # | Tool | Script |
@@ -70,6 +72,10 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 **Contact Search** — Instance ID, Start date, End date, Region, optional filters (channel, initiation method, queue ID, contact attribute), max contacts, output file
 
 **Contact Recordings** — Instance ID, Contact ID, Region, URL expiry (seconds, default 3600)
+
+**Flow Scan** — Instance ID, Region, Flow name (or blank for all), Flow type filter, Show per-block detail (y/n)
+
+**Flow Usage** — Instance ID, Region, Count by (contacts / invocations), Flow name filter, Time window (7d default / 24h / 30d / custom), Output CSV
 
 **Export Flow** — Instance ID, Region, optionally list flows first, Flow name, Exact match (y/n), Output file
 

@@ -686,6 +686,44 @@ def tool_flow_to_chart():
     tool_runner("Flow to Chart", "flow_to_chart.py", FLOW_TO_CHART_QUESTIONS, connect_tool=False)
 
 
+# ── Tool: Flow Usage ──────────────────────────────────────────────────────────
+
+_FLOW_USAGE_WINDOWS = ["last 7d (default)", "last 24h", "last 30d", "custom"]
+
+def tool_flow_usage():
+    _header("Flow Usage")
+    iid, region, profile = ask_connect_defaults()
+
+    by_mode = ask_choice("Count by", ["contacts", "invocations"], default="contacts")
+    flow    = ask("Flow name filter (leave blank for all)", required=False)
+
+    window_choice = ask_choice("Time window", _FLOW_USAGE_WINDOWS, default="last 7d (default)")
+
+    args = connect_args(iid, region, profile) + ["--by", by_mode]
+    if flow: args += ["--flow", flow]
+
+    if window_choice == "last 7d (default)":
+        pass  # default
+    elif window_choice == "last 24h":
+        args += ["--last", "24h"]
+    elif window_choice == "last 30d":
+        args += ["--last", "30d"]
+    else:  # custom
+        last = ask("Duration (e.g. 4h, 7d) or leave blank for --start/--end", required=False)
+        if last:
+            args += ["--last", last]
+        else:
+            start = ask("Start (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)")
+            end   = ask("End   (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)", required=False)
+            args += ["--start", start]
+            if end: args += ["--end", end]
+
+    csv_out = ask("CSV output file (leave blank to print)", required=False)
+    if csv_out: args += ["--csv", csv_out]
+
+    _run("flow_usage.py", args)
+
+
 # ── Tool: Log Insights ────────────────────────────────────────────────────────
 
 def _list_queries() -> list[Path]:
@@ -994,6 +1032,7 @@ GROUPS = [
     ]),
     ("Flows", [
         ("Flow Scan",          tool_flow_scan,         "Scan flows for broken references, dead ends, missing error handlers"),
+        ("Flow Usage",         tool_flow_usage,        "Count how many contacts or invocations hit each flow over a time window"),
         ("Export Flow",        tool_export_flow,       "Export a contact flow definition to JSON by name"),
         ("Flow to Chart",      tool_flow_to_chart,     "Convert an exported flow JSON to a visual flowchart"),
     ]),
