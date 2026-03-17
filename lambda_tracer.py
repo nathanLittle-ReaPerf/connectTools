@@ -17,6 +17,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+import ct_config
 import ct_snapshot
 
 RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
@@ -428,6 +429,11 @@ def main():
 
     # Resolve Connect log group
     log_group = args.log_group
+    if log_group:
+        cfg = ct_config.load()
+        ct_config.set_log_group(cfg, args.instance_id, log_group)
+    else:
+        log_group = ct_config.get_log_group(args.instance_id)
     if not log_group:
         alias = fetch_instance_alias(connect, args.instance_id)
         if alias:

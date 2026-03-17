@@ -19,6 +19,7 @@ from collections import defaultdict
 
 import boto3
 
+import ct_config
 import ct_snapshot
 from botocore.config import Config
 from botocore.exceptions import ClientError
@@ -539,6 +540,11 @@ def main():
 
     if args.instance_id:
         connect_log_group = args.connect_log_group
+        if connect_log_group:
+            cfg = ct_config.load()
+            ct_config.set_log_group(cfg, args.instance_id, connect_log_group)
+        else:
+            connect_log_group = ct_config.get_log_group(args.instance_id)
         if not connect_log_group:
             alias = fetch_instance_alias(connect_client, args.instance_id)
             if alias:

@@ -19,6 +19,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+import ct_config
 import ct_snapshot
 
 RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
@@ -208,7 +209,12 @@ def make_clients(region, profile):
 
 def resolve_log_group(connect_client, instance_id: str, override: str | None) -> str:
     if override:
+        cfg = ct_config.load()
+        ct_config.set_log_group(cfg, instance_id, override)
         return override
+    saved = ct_config.get_log_group(instance_id)
+    if saved:
+        return saved
     try:
         inst  = connect_client.describe_instance(InstanceId=instance_id)["Instance"]
         alias = inst.get("InstanceAlias") or instance_id
