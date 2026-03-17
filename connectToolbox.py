@@ -1013,13 +1013,20 @@ def tool_settings():
     _header("Settings")
     cfg = ct_config.load()
 
+    iid       = cfg.get("instance_id") or ""
+    log_group = ct_config.get_log_group(iid) if iid else ""
+
     print("  Current defaults:\n")
     any_set = False
     for key, label in ct_config.FIELDS:
         val = cfg.get(key) or "(not set)"
         if cfg.get(key):
             any_set = True
-        print(f"    {label:<16}  {val}")
+        print(f"    {label:<20}  {val}")
+    lg_val = log_group or "(not set)"
+    if log_group:
+        any_set = True
+    print(f"    {'Connect Log Group':<20}  {lg_val}")
     print()
 
     if not ask_bool("Edit these settings?", default=True):
@@ -1029,6 +1036,9 @@ def tool_settings():
     for key, label in ct_config.FIELDS:
         new_cfg[key] = ask(label, required=False, default=cfg.get(key, ""))
 
+    new_iid       = new_cfg.get("instance_id") or iid
+    new_log_group = ask("Connect Log Group", required=False, default=log_group)
+
     if any_set:
         if not ask_bool("Overwrite existing config?", default=False):
             print("  Cancelled.")
@@ -1036,6 +1046,8 @@ def tool_settings():
 
     ct_config.save(new_cfg)
     _cfg.update(new_cfg)
+    if new_log_group and new_iid:
+        ct_config.set_log_group(new_cfg, new_iid, new_log_group)
     print(f"  \033[90mSaved to {ct_config.CONFIG_FILE}\033[0m")
 
 
