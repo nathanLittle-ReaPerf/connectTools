@@ -135,6 +135,54 @@ Works on both Linux (AWS CloudShell) and Windows (local). Arrow key handling use
 
 `winpty` bridges mintty's PTY to the Windows console API that Python expects. It ships with **Git for Windows** — if you have Git Bash you already have it. Verify with `which winpty`.
 
+## Adding to PATH
+
+### AWS CloudShell
+
+Add to `~/.bashrc` (persists across CloudShell sessions):
+
+```bash
+alias connecttools='python ~/connectTools/connectToolbox.py'
+```
+
+Then reload:
+```bash
+source ~/.bashrc
+```
+
+Run from anywhere with `connecttools`.
+
+---
+
+### Local — Cmder / Git Bash (Windows)
+
+Add to `~/.bashrc`:
+
+```bash
+alias connecttools='winpty python /c/Users/nathan.littlerea/workStuffs/connectTools/connectToolbox.py'
+```
+
+Then reload:
+```bash
+source ~/.bashrc
+```
+
+Run from anywhere with `connecttools`.
+
+---
+
+### Local — PowerShell or cmd
+
+Create a `.bat` file in a folder that's already on your Windows `PATH`
+(e.g. `C:\Users\nathan.littlerea\bin\connecttools.bat`):
+
+```bat
+@echo off
+winpty python C:\Users\nathan.littlerea\workStuffs\connectTools\connectToolbox.py %*
+```
+
+Run from anywhere with `connecttools`.
+
 ## Notes
 
 - All tools run as subprocesses, so a `sys.exit` in any tool returns cleanly to the menu rather than closing the launcher.
