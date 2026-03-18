@@ -724,6 +724,41 @@ def tool_flow_usage():
     _run("flow_usage.py", args)
 
 
+# ── Tool: Flow Optimize ───────────────────────────────────────────────────────
+
+def tool_flow_optimize():
+    _header("Flow Optimize")
+    source = ask_choice("Source", ["Local file", "Instance flow", "All flows"])
+
+    if source == "Local file":
+        path = ask("Flow JSON file path")
+        _run("flow_optimize.py", [path])
+        return
+
+    iid, region, profile = ask_connect_defaults()
+    args = connect_args(iid, region, profile)
+
+    if source == "Instance flow":
+        name = ask("Flow name")
+        args += ["--name", name]
+    else:
+        ftype = ask("Flow type filter (e.g. CONTACT_FLOW, leave blank for all)", required=False)
+        args += ["--all"]
+        if ftype: args += ["--type", ftype]
+
+    _run("flow_optimize.py", args)
+
+
+# ── Tool: Flow Review (AI) ────────────────────────────────────────────────────
+
+def tool_flow_review():
+    _header("Flow Review (AI)")
+    path = ask("Flow JSON file path")
+    model = ask_choice("Model", ["claude-opus-4-6", "claude-sonnet-4-6"],
+                       default="claude-opus-4-6")
+    _run("flow_review.py", [path, "--model", model])
+
+
 # ── Tool: Flow Compare ────────────────────────────────────────────────────────
 
 def tool_flow_compare():
@@ -1068,6 +1103,8 @@ GROUPS = [
     ]),
     ("Flows", [
         ("Flow Scan",           tool_flow_scan,           "Scan flows for broken references, dead ends, missing error handlers"),
+        ("Flow Optimize",       tool_flow_optimize,       "Rule-based UX, reliability, and maintainability suggestions"),
+        ("Flow Review (AI)",    tool_flow_review,         "Deep AI analysis via Claude API — intent-level recommendations"),
         ("Flow Usage",          tool_flow_usage,          "Count how many contacts or invocations hit each flow over a time window"),
         ("Flow Compare",        tool_flow_compare,        "Diff two exported flow JSONs: added, removed, and modified blocks"),
         ("Orphaned Resources",  tool_orphaned_resources,  "Find flows, queues, prompts, and hours not referenced by any flow"),
