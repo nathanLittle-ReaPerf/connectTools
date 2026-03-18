@@ -728,7 +728,7 @@ def tool_flow_usage():
 
 def tool_flow_optimize():
     _header("Flow Optimize")
-    source = ask_choice("Source", ["Local file", "Instance flow", "All flows"])
+    source = ask_choice("Source", ["Local file", "Instance flow", "All flows"], default="Local file")
 
     if source == "Local file":
         path = ask("Flow JSON file path")
