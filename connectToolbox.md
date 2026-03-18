@@ -46,8 +46,7 @@ The menu is two levels: pick a **group**, then pick a **tool** within it. Press 
 |---|---|---|
 | 1 | Flow Scan | `flow_scan.py` |
 | 2 | Flow Optimize | `flow_optimize.py` |
-| 3 | Flow Review (AI) | `flow_review.py` |
-| 4 | Flow Usage | `flow_usage.py` |
+| 3 | Flow Usage | `flow_usage.py` |
 | 5 | Flow Compare | `flow_compare.py` |
 | 6 | Orphaned Resources | `orphaned_resources.py` |
 | 7 | Export Flow | `export_flow.py` |
@@ -81,7 +80,6 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 
 **Flow Optimize** — Source (local file / instance flow / all flows), then flow path or Instance ID + name/type filter
 
-**Flow Review (AI)** — Flow JSON file path, Model (claude-opus-4-6 / claude-sonnet-4-6). Requires ANTHROPIC_API_KEY.
 
 **Flow Usage** — Instance ID, Region, Count by (contacts / invocations), Flow name filter, Time window (7d default / 24h / 30d / custom), Output CSV
 

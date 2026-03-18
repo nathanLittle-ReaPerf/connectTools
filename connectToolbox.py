@@ -749,16 +749,6 @@ def tool_flow_optimize():
     _run("flow_optimize.py", args)
 
 
-# ── Tool: Flow Review (AI) ────────────────────────────────────────────────────
-
-def tool_flow_review():
-    _header("Flow Review (AI)")
-    path = ask("Flow JSON file path")
-    model = ask_choice("Model", ["claude-opus-4-6", "claude-sonnet-4-6"],
-                       default="claude-opus-4-6")
-    _run("flow_review.py", [path, "--model", model])
-
-
 # ── Tool: Flow Compare ────────────────────────────────────────────────────────
 
 def tool_flow_compare():
@@ -1104,7 +1094,6 @@ GROUPS = [
     ("Flows", [
         ("Flow Scan",           tool_flow_scan,           "Scan flows for broken references, dead ends, missing error handlers"),
         ("Flow Optimize",       tool_flow_optimize,       "Rule-based UX, reliability, and maintainability suggestions"),
-        ("Flow Review (AI)",    tool_flow_review,         "Deep AI analysis via Claude API — intent-level recommendations"),
         ("Flow Usage",          tool_flow_usage,          "Count how many contacts or invocations hit each flow over a time window"),
         ("Flow Compare",        tool_flow_compare,        "Diff two exported flow JSONs: added, removed, and modified blocks"),
         ("Orphaned Resources",  tool_orphaned_resources,  "Find flows, queues, prompts, and hours not referenced by any flow"),
