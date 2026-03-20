@@ -994,6 +994,24 @@ def tool_routing_profile_audit():
     _run("routing_profile_audit.py", args)
 
 
+# ── Tool: Security Profile Diff ───────────────────────────────────────────────
+
+def tool_security_profile_diff():
+    _header("Security Profile Diff")
+    iid, region, profile = ask_connect_defaults()
+    sp_a   = ask("First security profile name (A)")
+    sp_b   = ask("Second security profile name (B)")
+    show_all = ask_bool("Show shared permissions too?", default=False)
+    output = ask("CSV output file (leave blank to print)", required=False)
+
+    args = connect_args(iid, region, profile)
+    args += ["--profile-a", sp_a, "--profile-b", sp_b]
+    if show_all: args += ["--all"]
+    if output:   args += ["--csv", output]
+
+    _run("security_profile_diff.py", args)
+
+
 # ── Tool: Instance Snapshot ───────────────────────────────────────────────────
 
 def tool_instance_snapshot():
@@ -1107,7 +1125,8 @@ GROUPS = [
     ("Agents", [
         ("Agent Activity",        tool_agent_activity,       "Agent handle time and activity report by date range"),
         ("Agent List",            tool_agent_list,           "List agents with routing profile, hierarchy, and security profiles"),
-        ("Routing Profile Audit", tool_routing_profile_audit,"Per-profile queue assignments, agent counts, and anomalies"),
+        ("Routing Profile Audit",  tool_routing_profile_audit,  "Per-profile queue assignments, agent counts, and anomalies"),
+        ("Security Profile Diff",  tool_security_profile_diff,  "Diff permissions between two security profiles"),
     ]),
     ("Instance", [
         ("Instance Snapshot",  tool_instance_snapshot, "Fetch and store instance inventory for fast name resolution"),

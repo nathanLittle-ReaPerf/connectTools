@@ -335,6 +335,39 @@ python routing_profile_audit.py --instance-id <UUID> --json | jq '.anomalies'
 
 ---
 
+### `security_profile_diff.py` — Security Profile Diff
+
+Compare the permission sets of two security profiles. Shows permissions only in A, only in B, and a count of shared permissions. Use `--all` to list shared permissions too.
+
+```bash
+# Human-readable diff
+python security_profile_diff.py --instance-id <UUID> --profile-a "Agent" --profile-b "Supervisor" --region us-east-1
+
+# Show shared permissions too
+python security_profile_diff.py --instance-id <UUID> --profile-a "Agent" --profile-b "Admin" --all
+
+# Export to CSV
+python security_profile_diff.py --instance-id <UUID> --profile-a "Tier 1" --profile-b "Tier 2" --csv diff.csv
+
+# Raw JSON
+python security_profile_diff.py --instance-id <UUID> --profile-a "Agent" --profile-b "Supervisor" --json | jq '.only_in_b'
+```
+
+**APIs used:** `ListSecurityProfiles`, `ListSecurityProfilePermissions`
+
+**Required IAM:**
+- `connect:ListSecurityProfiles`
+- `connect:ListSecurityProfilePermissions`
+
+**Key behaviors:**
+- `--profile-a` / `--profile-b` are case-insensitive substring matches; exits with a list if 0 or >1 profiles match
+- Exits clearly if both names resolve to the same profile
+- Output: red `─` = only in A, green `+` = only in B, dim `=` = shared (shown only with `--all`)
+- Reports "identical" if both profiles have the same permission set
+- CSV columns: `Permission`, `InA`, `InB`, `Status` (`only_in_a` / `only_in_b` / `shared`)
+
+---
+
 ### `export_flow.py` — Export a Contact Flow by Name
 
 Export a contact flow's full JSON definition, identified by name. Useful for version-controlling flows, diffing changes, or migrating between instances.

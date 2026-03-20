@@ -38,8 +38,13 @@ The menu is two levels: pick a **group**, then pick a **tool** within it. Press 
 |---|---|---|
 | 1 | Contacts Handled | `contacts_handled.py` |
 | 2 | Contact Inspect | `contact_inspect.py` |
-| 3 | Contact Search | `contact_search.py` |
-| 4 | Contact Recordings | `contact_recordings.py` |
+| 3 | Contact Timeline | `contact_timeline.py` |
+| 4 | Contact Diff | `contact_diff.py` |
+| 5 | Contact Search | `contact_search.py` |
+| 6 | Contact Recordings | `contact_recordings.py` |
+| 7 | Contact Logs | `contact_logs.py` |
+| 8 | Lambda Tracer | `lambda_tracer.py` |
+| 9 | Lambda Errors | `lambda_errors.py` |
 
 ### Flows
 | # | Tool | Script |
@@ -47,10 +52,10 @@ The menu is two levels: pick a **group**, then pick a **tool** within it. Press 
 | 1 | Flow Scan | `flow_scan.py` |
 | 2 | Flow Optimize | `flow_optimize.py` |
 | 3 | Flow Usage | `flow_usage.py` |
-| 5 | Flow Compare | `flow_compare.py` |
-| 6 | Orphaned Resources | `orphaned_resources.py` |
-| 7 | Export Flow | `export_flow.py` |
-| 8 | Flow to Chart | `flow_to_chart.py` |
+| 4 | Flow Compare | `flow_compare.py` |
+| 5 | Orphaned Resources | `orphaned_resources.py` |
+| 6 | Export Flow | `export_flow.py` |
+| 7 | Flow to Chart | `flow_to_chart.py` |
 
 ### Log Insights
 | # | Tool | Script |
@@ -63,6 +68,14 @@ The menu is two levels: pick a **group**, then pick a **tool** within it. Press 
 |---|---|---|
 | 1 | Agent Activity | `agent_activity.py` |
 | 2 | Agent List | `agent_list.py` |
+| 3 | Routing Profile Audit | `routing_profile_audit.py` |
+| 4 | Security Profile Diff | `security_profile_diff.py` |
+
+### Instance
+| # | Tool | Script |
+|---|---|---|
+| 1 | Instance Snapshot | `instance_snapshot.py` |
+| 2 | Phone Numbers | `phone_numbers.py` |
 
 After selecting a tool, the menu prompts for each argument one at a time. Optional fields can be left blank to use defaults. When the tool finishes, press Enter to return to the tool submenu.
 
@@ -95,7 +108,25 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 
 **Agent Activity** — Instance ID, Region, Named period or date range, optional agent login filter, Output CSV
 
+**Contact Timeline** — Instance ID, Contact ID, Region, Include transcript (y/n)
+
+**Contact Diff** — Instance ID, Contact ID A, Contact ID B, Region, Show all attributes (y/n)
+
+**Contact Logs** — Instance ID, Contact ID, Region, Output file
+
+**Lambda Tracer** — Instance ID, Contact ID, Region, Summary only (y/n), Output file
+
+**Lambda Errors** — Instance ID, Function name (substring), Region, Time window (last N / start+end / period), Output CSV
+
 **Agent List** — Instance ID, Region, optional username search (substring), optional routing profile filter, Output CSV
+
+**Routing Profile Audit** — Instance ID, Region, optional name filter, Output CSV
+
+**Security Profile Diff** — Instance ID, Profile A name, Profile B name, Show shared permissions (y/n), Output CSV
+
+**Instance Snapshot** — Instance ID, Region (refreshes or shows existing snapshot)
+
+**Phone Numbers** — Instance ID, Region, optional flow name filter, unassigned only (y/n), Output CSV
 
 ## Logging
 
