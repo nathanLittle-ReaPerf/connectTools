@@ -696,9 +696,11 @@ def tool_flow_attr_search():
     if source == "Local file(s)":
         raw = ask("Flow JSON file path(s), space-separated")
         paths = raw.split()
-        detail = ask_bool("Show per-block detail?")
-        args = paths
-        if detail: args += ["--detail"]
+        fmt    = ask_choice("Output format", ["text", "json"], default="text")
+        detail = ask_bool("Show per-block detail?") if fmt == "text" else False
+        args   = paths
+        if detail:       args += ["--detail"]
+        if fmt == "json": args += ["--json"]
         _run("flow_attr_search.py", ["--attribute", attr] + args)
         return
 
@@ -712,11 +714,15 @@ def tool_flow_attr_search():
         ftype = ask("Flow type filter (e.g. CONTACT_FLOW, leave blank for all)", required=False)
         args += ["--all"]
         if ftype: args += ["--type", ftype]
-        detail = ask_bool("Show per-block detail?")
-        if detail: args += ["--detail"]
 
     exact = ask_bool("Exact case match?")
     if exact: args += ["--exact"]
+
+    fmt = ask_choice("Output format", ["text", "json"], default="text")
+    if fmt == "text" and source == "All flows":
+        detail = ask_bool("Show per-block detail?")
+        if detail: args += ["--detail"]
+    if fmt == "json": args += ["--json"]
 
     _run("flow_attr_search.py", args)
 

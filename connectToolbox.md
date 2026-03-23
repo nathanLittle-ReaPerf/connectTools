@@ -92,7 +92,7 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 
 **Flow Scan** — Instance ID, Region, Flow name (or blank for all), Flow type filter, Show per-block detail (y/n)
 
-**Flow Attr Search** — Attribute name, Source (local file(s) / instance flow / all flows), then path(s) or Instance ID + name/type filter, Show per-block detail (y/n), Exact case match (y/n)
+**Flow Attr Search** — Attribute name, Source (local file(s) / instance flow / all flows), then path(s) or Instance ID + name/type filter, Exact case match (y/n), Output format (text / json), Show per-block detail (y/n, text mode only)
 
 **Flow Optimize** — Source (local file / instance flow / all flows), then flow path or Instance ID + name/type filter
 
