@@ -499,7 +499,7 @@ _HTML = r"""<!DOCTYPE html>
     cy.on('zoom', updateLabel);
     updateLabel();
     function fit() { cy.fit(undefined, 40); updateLabel(); }
-    function zoomBy(f) { cy.zoom({ level: cy.zoom() * f, renderedPosition: { x: cy.width()/2, y: cy.height()/2 } }); }
+    function zoomBy(f) { cy.zoom(cy.zoom() * f); cy.center(); }
     document.getElementById('btn-zoom-in') .addEventListener('click', () => zoomBy(1.25));
     document.getElementById('btn-zoom-out').addEventListener('click', () => zoomBy(0.8));
     document.getElementById('btn-reset')   .addEventListener('click', fit);
@@ -718,7 +718,7 @@ def main():
     elements = build_elements(rows)
 
     cid   = rows[0].get("ContactId", in_path.stem)
-    title = f"Journey: {cid}"
+    title = f"Contact ID: {cid}"
     html  = to_html(elements, title)
 
     out_path.write_text(html, encoding="utf-8")
