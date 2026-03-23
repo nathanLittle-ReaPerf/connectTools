@@ -50,12 +50,13 @@ The menu is two levels: pick a **group**, then pick a **tool** within it. Press 
 | # | Tool | Script |
 |---|---|---|
 | 1 | Flow Scan | `flow_scan.py` |
-| 2 | Flow Optimize | `flow_optimize.py` |
-| 3 | Flow Usage | `flow_usage.py` |
-| 4 | Flow Compare | `flow_compare.py` |
-| 5 | Orphaned Resources | `orphaned_resources.py` |
-| 6 | Export Flow | `export_flow.py` |
-| 7 | Flow to Chart | `flow_to_chart.py` |
+| 2 | Flow Attr Search | `flow_attr_search.py` |
+| 3 | Flow Optimize | `flow_optimize.py` |
+| 4 | Flow Usage | `flow_usage.py` |
+| 5 | Flow Compare | `flow_compare.py` |
+| 6 | Orphaned Resources | `orphaned_resources.py` |
+| 7 | Export Flow | `export_flow.py` |
+| 8 | Flow to Chart | `flow_to_chart.py` |
 
 ### Log Insights
 | # | Tool | Script |
@@ -90,6 +91,8 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 **Contact Recordings** — Instance ID, Contact ID, Region, URL expiry (seconds, default 3600)
 
 **Flow Scan** — Instance ID, Region, Flow name (or blank for all), Flow type filter, Show per-block detail (y/n)
+
+**Flow Attr Search** — Attribute name, Source (local file(s) / instance flow / all flows), then path(s) or Instance ID + name/type filter, Show per-block detail (y/n), Exact case match (y/n)
 
 **Flow Optimize** — Source (local file / instance flow / all flows), then flow path or Instance ID + name/type filter
 

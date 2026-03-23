@@ -686,6 +686,41 @@ def tool_flow_to_chart():
     tool_runner("Flow to Chart", "flow_to_chart.py", FLOW_TO_CHART_QUESTIONS, connect_tool=False)
 
 
+# ── Tool: Flow Attribute Search ───────────────────────────────────────────────
+
+def tool_flow_attr_search():
+    _header("Flow Attribute Search")
+    attr = ask("Attribute name to search for")
+    source = ask_choice("Source", ["Local file(s)", "Instance flow", "All flows"], default="Local file(s)")
+
+    if source == "Local file(s)":
+        raw = ask("Flow JSON file path(s), space-separated")
+        paths = raw.split()
+        detail = ask_bool("Show per-block detail?")
+        args = paths
+        if detail: args += ["--detail"]
+        _run("flow_attr_search.py", ["--attribute", attr] + args)
+        return
+
+    iid, region, profile = ask_connect_defaults()
+    args = connect_args(iid, region, profile) + ["--attribute", attr]
+
+    if source == "Instance flow":
+        name = ask("Flow name")
+        args += ["--name", name]
+    else:
+        ftype = ask("Flow type filter (e.g. CONTACT_FLOW, leave blank for all)", required=False)
+        args += ["--all"]
+        if ftype: args += ["--type", ftype]
+        detail = ask_bool("Show per-block detail?")
+        if detail: args += ["--detail"]
+
+    exact = ask_bool("Exact case match?")
+    if exact: args += ["--exact"]
+
+    _run("flow_attr_search.py", args)
+
+
 # ── Tool: Flow Usage ──────────────────────────────────────────────────────────
 
 _FLOW_USAGE_WINDOWS = ["last 7d (default)", "last 24h", "last 30d", "custom"]
@@ -1110,13 +1145,14 @@ GROUPS = [
         ("Lambda Errors",      tool_lambda_errors,     "Aggregate Lambda errors across all contacts for a function and time window"),
     ]),
     ("Flows", [
-        ("Flow Scan",           tool_flow_scan,           "Scan flows for broken references, dead ends, missing error handlers"),
-        ("Flow Optimize",       tool_flow_optimize,       "Rule-based UX, reliability, and maintainability suggestions"),
-        ("Flow Usage",          tool_flow_usage,          "Count how many contacts or invocations hit each flow over a time window"),
-        ("Flow Compare",        tool_flow_compare,        "Diff two exported flow JSONs: added, removed, and modified blocks"),
-        ("Orphaned Resources",  tool_orphaned_resources,  "Find flows, queues, prompts, and hours not referenced by any flow"),
-        ("Export Flow",         tool_export_flow,         "Export a contact flow definition to JSON by name"),
-        ("Flow to Chart",       tool_flow_to_chart,       "Convert an exported flow JSON to a visual flowchart"),
+        ("Flow Scan",             tool_flow_scan,             "Scan flows for broken references, dead ends, missing error handlers"),
+        ("Flow Attr Search",      tool_flow_attr_search,      "Find every SET, CHECK, and REF of a contact attribute across flows"),
+        ("Flow Optimize",         tool_flow_optimize,         "Rule-based UX, reliability, and maintainability suggestions"),
+        ("Flow Usage",            tool_flow_usage,            "Count how many contacts or invocations hit each flow over a time window"),
+        ("Flow Compare",          tool_flow_compare,          "Diff two exported flow JSONs: added, removed, and modified blocks"),
+        ("Orphaned Resources",    tool_orphaned_resources,    "Find flows, queues, prompts, and hours not referenced by any flow"),
+        ("Export Flow",           tool_export_flow,           "Export a contact flow definition to JSON by name"),
+        ("Flow to Chart",         tool_flow_to_chart,         "Convert an exported flow JSON to a visual flowchart"),
     ]),
     ("Log Insights", [
         ("Log Insights",       tool_log_insights,      "Run CloudWatch Logs Insights queries with variable substitution"),
