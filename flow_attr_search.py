@@ -8,6 +8,7 @@ one or all flows in an instance, or in a local exported flow JSON file.
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import re
 import sys
@@ -19,6 +20,20 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[mK]")
+
+
+class _AnsiStripper(io.TextIOBase):
+    """Wraps a text file and strips ANSI escape codes on write."""
+    def __init__(self, f):
+        self._f = f
+    def write(self, s: str) -> int:
+        clean = _ANSI_RE.sub("", s)
+        self._f.write(clean)
+        return len(s)
+    def flush(self):
+        self._f.flush()
 
 _MAN = """\
 NAME
@@ -474,6 +489,8 @@ examples:
                    help="Show per-block breakdown in bulk mode")
     p.add_argument("--json", action="store_true", dest="output_json",
                    help="Emit raw JSON")
+    p.add_argument("--output", default=None, metavar="FILE",
+                   help="Save output to a file (text or JSON depending on --json)")
 
     args = p.parse_args()
 
@@ -497,6 +514,22 @@ def main():
     args = parse_args()
     attr = args.attribute
 
+    # ── Output file setup ─────────────────────────────────────────────────────
+    out_file = None
+    if args.output:
+        out_file = open(args.output, "w", encoding="utf-8")
+        sys.stdout = out_file if args.output_json else _AnsiStripper(out_file)
+
+    try:
+        _run_search(args, attr)
+    finally:
+        if out_file:
+            sys.stdout = sys.__stdout__
+            out_file.close()
+            print(f"  Saved to {args.output}", file=sys.stderr)
+
+
+def _run_search(args, attr):
     # ── Local file mode ───────────────────────────────────────────────────────
     if args.flow_files:
         results = []
