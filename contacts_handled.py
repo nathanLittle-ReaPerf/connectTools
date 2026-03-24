@@ -68,8 +68,9 @@ IAM PERMISSIONS
 NOTES
     GetMetricDataV2 retains historical data for approximately 93 days. Requesting
     a month older than that will exit with an error and show the earliest queryable
-    month. Reported separately for STANDARD queues (shared) and AGENT queues
-    (personal), plus a combined total.
+    month. The metric is summed over all STANDARD queues; contacts with no
+    queue attribution (e.g. direct inbound to agent) are not captured by
+    GetMetricDataV2 and are excluded.
 """
 
 
@@ -228,8 +229,7 @@ examples:
     instance_id, instance_arn = resolve_instance(client, args.instance_id, args.instance_arn)
 
     standard_queue_ids = list_queue_ids_by_type(client, instance_id, "STANDARD")
-    agent_queue_ids    = list_queue_ids_by_type(client, instance_id, "AGENT")
-    if not standard_queue_ids and not agent_queue_ids:
+    if not standard_queue_ids:
         print("No queues found in the instance — nothing to aggregate.")
         return
 
@@ -255,14 +255,9 @@ examples:
         )
         sys.exit(1)
 
-    standard_total = get_contacts_handled(client, instance_arn, start, end, standard_queue_ids, tz=args.timezone) if standard_queue_ids else 0
-    agent_total    = get_contacts_handled(client, instance_arn, start, end, agent_queue_ids,    tz=args.timezone) if agent_queue_ids    else 0
+    total = get_contacts_handled(client, instance_arn, start, end, standard_queue_ids, tz=args.timezone)
 
-    period = f"{start:%Y-%m-%d} to {end:%Y-%m-%d} ({args.timezone})"
-    print(f"{period}")
-    print(f"  Standard Queues:   {standard_total:,}")
-    print(f"  Agent Queues:      {agent_total:,}")
-    print(f"  Total:             {standard_total + agent_total:,}")
+    print(f"{start:%Y-%m-%d} to {end:%Y-%m-%d} ({args.timezone}): {total:,} Contacts Handled")
 
 
 if __name__ == "__main__":

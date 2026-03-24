@@ -64,9 +64,6 @@ IAM PERMISSIONS
     connect:GetMetricDataV2
 
 NOTES
-    Agent queue contacts are derived as (total - standard) because GetMetricDataV2
-    does not report CONTACTS_HANDLED against agent queue IDs directly.
-
     GetMetricDataV2 retains historical data for approximately 93 days. Requesting
     a month older than that will exit with an error and show the earliest queryable
     month.
@@ -201,60 +198,13 @@ def get_total_handled_by_agent(
     return agent_counts
 
 
-def get_standard_handled_by_agent(
-    client, resource_arn: str, start: dt.datetime, end: dt.datetime,
-    queue_ids: list[str], tz: str = "UTC",
-) -> dict[str, int]:
-    """Returns {agent_id: contacts_handled} for standard queue IDs only."""
-    if not queue_ids:
-        return {}
-    agent_counts: dict[str, int] = {}
-    for batch in _chunks(queue_ids, 100):
-        token = None
-        while True:
-            kwargs = {
-                "ResourceArn": resource_arn,
-                "StartTime":   start,
-                "EndTime":     end,
-                "Interval":    {"IntervalPeriod": "TOTAL", "TimeZone": tz},
-                "Filters":     [{"FilterKey": "QUEUE", "FilterValues": batch}],
-                "Groupings":   ["AGENT"],
-                "Metrics":     [{"Name": "CONTACTS_HANDLED"}],
-            }
-            if token:
-                kwargs["NextToken"] = token
-            try:
-                resp = client.get_metric_data_v2(**kwargs)
-            except ClientError as e:
-                code = e.response["Error"]["Code"]
-                msg  = e.response["Error"]["Message"]
-                print(f"Error fetching metrics [{code}]: {msg}", file=sys.stderr)
-                sys.exit(1)
-            _accumulate_agent_metric(resp, agent_counts)
-            token = resp.get("NextToken")
-            if not token:
-                break
-    return agent_counts
-
-
 # ── Data assembly ─────────────────────────────────────────────────────────────
 
-def build_rows(
-    total_by_agent: dict[str, int],
-    standard_by_agent: dict[str, int],
-    user_map: dict[str, str],
-) -> list[dict]:
-    """Agent queue = total - standard (API doesn't report CONTACTS_HANDLED per agent queue ID)."""
-    rows = []
-    for agent_id, total in total_by_agent.items():
-        standard = standard_by_agent.get(agent_id, 0)
-        agent    = max(total - standard, 0)
-        rows.append({
-            "login_id": user_map.get(agent_id, agent_id),
-            "standard": standard,
-            "agent":    agent,
-            "total":    total,
-        })
+def build_rows(total_by_agent: dict[str, int], user_map: dict[str, str]) -> list[dict]:
+    rows = [
+        {"login_id": user_map.get(agent_id, agent_id), "total": total}
+        for agent_id, total in total_by_agent.items()
+    ]
     rows.sort(key=lambda r: (-r["total"], r["login_id"]))
     return rows
 
@@ -267,40 +217,22 @@ def print_table(rows: list[dict], period: str, timezone: str) -> None:
         return
 
     col_login = max(max(len(r["login_id"]) for r in rows), len("Login ID"))
-    col_num   = max(max(len(f"{r['total']:,}") for r in rows), len("Std Queues"))
-
-    h_login = f"{'Login ID':<{col_login}}"
-    h_std   = f"{'Std Queues':>{col_num}}"
-    h_agt   = f"{'Agt Queues':>{col_num}}"
-    h_tot   = f"{'Total':>{col_num}}"
-    sep     = "   ".join(["-" * col_login, "-" * col_num, "-" * col_num, "-" * col_num])
+    col_num   = max(max(len(f"{r['total']:,}") for r in rows), len("Handled"))
+    sep       = f"{'-' * col_login}   {'-' * col_num}"
 
     print(f"{period} ({timezone})")
     print()
-    print("   ".join([h_login, h_std, h_agt, h_tot]))
+    print(f"{'Login ID':<{col_login}}   {'Handled':>{col_num}}")
     print(sep)
     for r in rows:
-        print(
-            f"{r['login_id']:<{col_login}}   "
-            f"{r['standard']:>{col_num},}   "
-            f"{r['agent']:>{col_num},}   "
-            f"{r['total']:>{col_num},}"
-        )
+        print(f"{r['login_id']:<{col_login}}   {r['total']:>{col_num},}")
     print(sep)
-    std_total = sum(r["standard"] for r in rows)
-    agt_total = sum(r["agent"]    for r in rows)
-    tot_total = sum(r["total"]    for r in rows)
-    print(
-        f"{'Total':<{col_login}}   "
-        f"{std_total:>{col_num},}   "
-        f"{agt_total:>{col_num},}   "
-        f"{tot_total:>{col_num},}"
-    )
+    print(f"{'Total':<{col_login}}   {sum(r['total'] for r in rows):>{col_num},}")
 
 
 def write_csv(rows: list[dict], path: str) -> None:
     with open(path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["login_id", "standard", "agent", "total"])
+        writer = csv.DictWriter(f, fieldnames=["login_id", "total"])
         writer.writeheader()
         writer.writerows(rows)
     print(f"CSV written to {path}", file=sys.stderr)
@@ -312,9 +244,7 @@ def print_json(rows: list[dict], start: dt.datetime, end: dt.datetime, timezone:
         "timezone": timezone,
         "agents":   rows,
         "summary": {
-            "standard": sum(r["standard"] for r in rows),
-            "agent":    sum(r["agent"]    for r in rows),
-            "total":    sum(r["total"]    for r in rows),
+            "total": sum(r["total"] for r in rows),
         },
     }
     print(json.dumps(out, indent=2))
@@ -360,8 +290,6 @@ examples:
     client = make_client(args.region, args.profile)
     instance_id, instance_arn = resolve_instance(client, args.instance_id)
 
-    standard_queue_ids = list_queue_ids_by_type(client, instance_id, "STANDARD")
-
     user_map = list_users(client, instance_id)
 
     start, end = month_range(year, month)
@@ -383,10 +311,9 @@ examples:
         )
         sys.exit(1)
 
-    total_by_agent    = get_total_handled_by_agent(client, instance_arn, start, end, tz=args.timezone)
-    standard_by_agent = get_standard_handled_by_agent(client, instance_arn, start, end, standard_queue_ids, tz=args.timezone)
+    total_by_agent = get_total_handled_by_agent(client, instance_arn, start, end, tz=args.timezone)
 
-    rows = build_rows(total_by_agent, standard_by_agent, user_map)
+    rows = build_rows(total_by_agent, user_map)
 
     if args.json:
         print_json(rows, start, end, args.timezone)
