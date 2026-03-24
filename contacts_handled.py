@@ -68,7 +68,8 @@ IAM PERMISSIONS
 NOTES
     GetMetricDataV2 retains historical data for approximately 93 days. Requesting
     a month older than that will exit with an error and show the earliest queryable
-    month. The metric is summed over all STANDARD queues; AGENT queues are excluded.
+    month. Reported separately for STANDARD queues (shared) and AGENT queues
+    (personal), plus a combined total.
 """
 
 
@@ -127,10 +128,10 @@ def resolve_instance(client, instance_id: str | None, instance_arn: str | None) 
         sys.exit(1)
 
 
-def list_all_queue_ids(client, instance_id: str) -> list[str]:
+def list_queue_ids_by_type(client, instance_id: str, queue_type: str) -> list[str]:
     queue_ids, token = [], None
     while True:
-        kwargs = {"InstanceId": instance_id, "QueueTypes": ["STANDARD"], "MaxResults": 100}
+        kwargs = {"InstanceId": instance_id, "QueueTypes": [queue_type], "MaxResults": 100}
         if token:
             kwargs["NextToken"] = token
         try:
@@ -226,8 +227,9 @@ examples:
     client = make_client(args.region, args.profile)
     instance_id, instance_arn = resolve_instance(client, args.instance_id, args.instance_arn)
 
-    queue_ids = list_all_queue_ids(client, instance_id)
-    if not queue_ids:
+    standard_queue_ids = list_queue_ids_by_type(client, instance_id, "STANDARD")
+    agent_queue_ids    = list_queue_ids_by_type(client, instance_id, "AGENT")
+    if not standard_queue_ids and not agent_queue_ids:
         print("No queues found in the instance — nothing to aggregate.")
         return
 
@@ -253,9 +255,14 @@ examples:
         )
         sys.exit(1)
 
-    total = get_contacts_handled(client, instance_arn, start, end, queue_ids, tz=args.timezone)
+    standard_total = get_contacts_handled(client, instance_arn, start, end, standard_queue_ids, tz=args.timezone) if standard_queue_ids else 0
+    agent_total    = get_contacts_handled(client, instance_arn, start, end, agent_queue_ids,    tz=args.timezone) if agent_queue_ids    else 0
 
-    print(f"{start:%Y-%m-%d} to {end:%Y-%m-%d} ({args.timezone}): {total:,} Contacts Handled")
+    period = f"{start:%Y-%m-%d} to {end:%Y-%m-%d} ({args.timezone})"
+    print(f"{period}")
+    print(f"  Standard Queues:   {standard_total:,}")
+    print(f"  Agent Queues:      {agent_total:,}")
+    print(f"  Total:             {standard_total + agent_total:,}")
 
 
 if __name__ == "__main__":
