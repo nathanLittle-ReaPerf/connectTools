@@ -274,10 +274,10 @@ def pick_flow(instance_id: str) -> str | None:
         print(red(f"  Enter a number, 'n', or 0 to go back."))
 
 def pick_scenario(default: str = "") -> str | None:
-    # Look for scenario*.json files nearby
+    scenarios_dir = SCRIPT_DIR / "Scenarios"
     candidates = sorted(
-        list(Path(".").glob("scenario*.json")) +
-        list(Path(".").glob("scenarios/scenario*.json"))
+        list(scenarios_dir.glob("scenario*.json")) if scenarios_dir.exists() else [] +
+        list(Path(".").glob("scenario*.json"))
     )
     if not candidates:
         return ask_file("Scenario JSON file", must_exist=True, default=default) or None
@@ -428,7 +428,7 @@ def action_from_logs():
     elif mode == "top":
         top_n = int(ask("How many top journeys?", default="5") or "5")
 
-    out_dir = ask("Output directory", default=".")
+    out_dir = ask("Output directory", default=str(SCRIPT_DIR / "Scenarios"))
     anonymize = ask_yn("Anonymize PII in attribute values?", default=False)
 
     cmd = [sys.executable, script("scenario_from_logs.py")] + log_files

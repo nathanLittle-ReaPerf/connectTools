@@ -16,9 +16,12 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
-CACHE_BASE   = Path.home() / ".connecttools" / "flows"
-STALE_DAYS   = 60
+RETRY_CONFIG    = Config(retries={"max_attempts": 5, "mode": "adaptive"})
+CACHE_BASE      = Path.home() / ".connecttools" / "flows"
+STALE_DAYS      = 60
+FLOWSIM_DIR     = Path(__file__).parent
+FLOW_MAPS_DIR   = FLOWSIM_DIR / "FlowMaps"
+SCENARIOS_DIR   = FLOWSIM_DIR / "Scenarios"
 
 _MAN = """\
 NAME
@@ -761,12 +764,14 @@ examples:
         print(f"  JSON map saved → {args.map}")
 
     if not args.no_html:
-        html_path = args.html or f"flow_map_{instance_id}.html"
+        FLOW_MAPS_DIR.mkdir(parents=True, exist_ok=True)
+        html_path = args.html or str(FLOW_MAPS_DIR / f"flow_map_{instance_id}.html")
         Path(html_path).write_text(build_html(map_data), encoding="utf-8")
         print(f"  HTML report    → {html_path}")
 
     if not args.no_scenario:
-        tmpl_path = args.scenario or f"scenario_{instance_id}.json"
+        SCENARIOS_DIR.mkdir(parents=True, exist_ok=True)
+        tmpl_path = args.scenario or str(SCENARIOS_DIR / f"scenario_{instance_id}.json")
         Path(tmpl_path).write_text(json.dumps(build_scenario_template(map_data), indent=2))
         print(f"  Scenario tmpl  → {tmpl_path}")
 

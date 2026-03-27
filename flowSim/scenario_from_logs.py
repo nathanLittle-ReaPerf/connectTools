@@ -101,6 +101,8 @@ EXAMPLES
     python scenario_from_logs.py contacts.json --anonymize
 """
 
+SCENARIOS_DIR = Path(__file__).parent / "Scenarios"
+
 # ── Log parsing ────────────────────────────────────────────────────────────────
 
 def _extract_messages(path: str) -> list[str]:
@@ -725,7 +727,8 @@ examples:
         """,
     )
     p.add_argument("log_files", nargs="+", metavar="LOG_FILE", help="CloudWatch export file(s)")
-    p.add_argument("--out-dir",     default=".",   metavar="DIR",  help="Output directory (default: .)")
+    p.add_argument("--out-dir",     default=str(SCENARIOS_DIR), metavar="DIR",
+                   help="Output directory (default: flowSim/Scenarios/)")
     p.add_argument("--merge",       action="store_true",           help="Merge all contacts into one scenario")
     p.add_argument("--top",         default=5,     type=int,       help="Write top N journeys (default: 5)")
     p.add_argument("--contact-id",  default=None,  metavar="UUID", help="Extract a single contact by ID")

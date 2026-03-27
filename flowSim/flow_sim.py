@@ -17,7 +17,9 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-CACHE_BASE = Path.home() / ".connecttools" / "flows"
+CACHE_BASE      = Path.home() / ".connecttools" / "flows"
+FLOWSIM_DIR     = Path(__file__).parent
+SIMULATIONS_DIR = FLOWSIM_DIR / "Simulations"
 
 _MAN = """\
 NAME
@@ -1042,7 +1044,8 @@ examples:
             print_trace(path, state, scenario)
 
     if not args.no_html:
-        html_path = args.html or ("sim_" + re.sub(r"[^a-zA-Z0-9_-]", "_", args.flow) + ".html")
+        SIMULATIONS_DIR.mkdir(parents=True, exist_ok=True)
+        html_path = args.html or str(SIMULATIONS_DIR / ("sim_" + re.sub(r"[^a-zA-Z0-9_-]", "_", args.flow) + ".html"))
         Path(html_path).write_text(build_html(path, state, scenario, by_id, by_name), encoding="utf-8")
         print(f"  HTML saved     → {html_path}")
 
