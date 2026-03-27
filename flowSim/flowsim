@@ -98,30 +98,39 @@ def _read_key() -> str:
         old = termios.tcgetattr(fd)
         try:
             tty.setraw(fd)
-            # Use os.read() directly — bypasses Python's BufferedReader so
-            # pre-buffered bytes can't cause a spurious immediate return.
+            # Flush inside raw mode — clears any bytes that cooked-mode
+            # processing (ICRNL, line editing) may have queued but not consumed.
+            termios.tcflush(fd, termios.TCIFLUSH)
             ch = _os.read(fd, 1)
-            if ch == b"\x1b":
-                if _sel.select([fd], [], [], 0.05)[0]:
-                    rest = _os.read(fd, 2)
-                    if rest == b"[A": return "UP"
-                    if rest == b"[B": return "DOWN"
+            if ch != b"\x1b":
+                return ch.decode("utf-8", errors="replace")
+            # Escape sequence — read one byte at a time so VMIN=1 can't
+            # short-read a 2-byte request and drop half the sequence.
+            if not _sel.select([fd], [], [], 0.05)[0]:
                 return "ESC"
-            return ch.decode("utf-8", errors="replace")
+            b2 = _os.read(fd, 1)
+            if b2 != b"[":
+                return "ESC"
+            if not _sel.select([fd], [], [], 0.05)[0]:
+                return "ESC"
+            b3 = _os.read(fd, 1)
+            if b3 == b"A": return "UP"
+            if b3 == b"B": return "DOWN"
+            return "ESC"
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
     else:
         # Windows (winpty/ConPTY): stdin is a pipe that delivers ANSI sequences.
-        # Use threading timeout so a bare Escape key doesn't block forever.
+        # Read one byte at a time with a threading timeout for sequence bytes.
         import os as _os
         import threading
         import queue as _q
         fd = sys.stdin.fileno()
 
-        def _read_n(n: int, timeout: float) -> bytes:
+        def _read_1(timeout: float) -> bytes:
             q: _q.Queue = _q.Queue()
             threading.Thread(
-                target=lambda: q.put(_os.read(fd, n)),
+                target=lambda: q.put(_os.read(fd, 1)),
                 daemon=True,
             ).start()
             try:
@@ -129,15 +138,18 @@ def _read_key() -> str:
             except _q.Empty:
                 return b""
 
-        ch = _read_n(1, 30.0)
+        ch = _read_1(30.0)
         if not ch:
             return ""
-        if ch == b"\x1b":
-            rest = _read_n(2, 0.05)
-            if rest == b"[A": return "UP"
-            if rest == b"[B": return "DOWN"
+        if ch != b"\x1b":
+            return ch.decode("utf-8", errors="replace")
+        b2 = _read_1(0.05)
+        if b2 != b"[":
             return "ESC"
-        return ch.decode("utf-8", errors="replace")
+        b3 = _read_1(0.05)
+        if b3 == b"A": return "UP"
+        if b3 == b"B": return "DOWN"
+        return "ESC"
 
 
 def pick_menu(title: str, options: list[tuple[str, str]]) -> str | None:
@@ -173,14 +185,6 @@ def pick_menu(title: str, options: list[tuple[str, str]]) -> str | None:
         first_draw = False
 
     render()
-    # Discard any characters already in the input buffer (e.g. terminal
-    # initialization sequences that arrived before we started reading).
-    if sys.platform != "win32":
-        try:
-            import termios
-            termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
-        except Exception:
-            pass
     while True:
         k = _read_key()
         if k == "UP":
