@@ -387,24 +387,42 @@ def pick_flow(instance_id: str) -> str | None:
             pass
         print(red(f"  Enter a number, 'n', or 0 to go back."))
 
+def _scenario_label(p: Path) -> tuple[str, str]:
+    """Return (name, hint) for display. name is _name or filename stem, hint is contact count or note snippet."""
+    d = load_json(str(p))
+    if not d:
+        return p.stem, ""
+    name = d.get("_name") or p.stem
+    count = d.get("_contact_count")
+    hint = f"{count} contact(s)" if count else d.get("_note", "")[:60]
+    return name, hint
+
+
 def pick_scenario(default: str = "") -> str | None:
     scenarios_dir = SCRIPT_DIR / "Scenarios"
-    candidates = sorted(
-        list(scenarios_dir.glob("scenario*.json")) if scenarios_dir.exists() else [] +
-        list(Path(".").glob("scenario*.json"))
-    )
+    candidates: list[Path] = []
+    if scenarios_dir.exists():
+        seen: set[str] = set()
+        for pat in ("scenario*.json", "archetype*.json"):
+            for p in sorted(scenarios_dir.glob(pat)):
+                if p.name not in seen:
+                    candidates.append(p)
+                    seen.add(p.name)
+        candidates.sort(key=lambda p: p.name)
+
     if not candidates:
         return ask_file("Scenario JSON file", must_exist=True, default=default) or None
 
     print()
-    print(bold("  Scenario files found:"))
+    print(bold("  Scenarios:"))
     print()
-    for i, p in enumerate(candidates, 1):
-        note = ""
-        d = load_json(str(p))
-        if d:
-            note = dim(f"  {d.get('_note','')[:70]}")
-        print(f"  {cyan(str(i))}.  {p}  {note}")
+    max_name = 0
+    labels = [_scenario_label(p) for p in candidates]
+    max_name = max((len(name) for name, _ in labels), default=20)
+    for i, (p, (name, hint)) in enumerate(zip(candidates, labels), 1):
+        name_col = bold(name.ljust(max_name))
+        hint_col = dim(f"  {hint}") if hint else ""
+        print(f"  {cyan(str(i)):>6}.  {name_col}{hint_col}")
     print(f"  {cyan('n')}.  Enter a different path")
     print(f"  {dim('0')}.  Back")
     print()
