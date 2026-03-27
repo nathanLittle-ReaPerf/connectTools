@@ -514,6 +514,8 @@ def action_export_logs():
 
     out_dir = ask("Output directory", default=str(SCRIPT_DIR / "Logs"))
 
+    out_dir_path = Path(out_dir)
+
     cmd = [
         sys.executable, script("export_flow_logs.py"),
         "--instance-id", instance_id,
@@ -524,7 +526,54 @@ def action_export_logs():
     cmd += time_args
     cmd += ["--max", str(max_contacts), "--out-dir", out_dir]
 
-    run(cmd)
+    rc = run(cmd)
+    if rc != 0:
+        return
+
+    # Find the most recently written file in the output dir
+    written: list[Path] = sorted(out_dir_path.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True) if out_dir_path.exists() else []
+    if not written:
+        return
+
+    latest = written[0]
+    print(green(f"  Log file ready: {latest.name}"))
+    print()
+
+    if not ask_yn("Build scenarios from this export now?", default=True):
+        return
+
+    print()
+    mode = pick_menu("Output mode", [
+        ("top",        "Top N journeys (one scenario per unique flow path)"),
+        ("archetypes", "Archetypes (named scenarios by decision-attribute profile)"),
+        ("merge",      "Merged (single scenario combining all contacts)"),
+    ])
+    if mode is None:
+        return
+
+    top_n = 5
+    archetype_instance = instance_id
+    if mode == "top":
+        top_n = int(ask("How many top journeys?", default="5") or "5")
+    elif mode == "archetypes":
+        print()
+        print(dim("  Using instance cache from the export. Run 'Map Instance' first if needed."))
+        archetype_instance = ask("Instance ID", default=instance_id) or instance_id
+
+    scenario_dir = ask("Scenario output directory", default=str(SCRIPT_DIR / "Scenarios"))
+    anonymize = ask_yn("Anonymize PII in attribute values?", default=False)
+
+    scen_cmd = [sys.executable, script("scenario_from_logs.py"), str(latest), "--out-dir", scenario_dir]
+    if mode == "merge":
+        scen_cmd.append("--merge")
+    elif mode == "archetypes":
+        scen_cmd += ["--archetypes", "--instance-id", archetype_instance]
+    else:
+        scen_cmd += ["--top", str(top_n)]
+    if anonymize:
+        scen_cmd.append("--anonymize")
+
+    run(scen_cmd)
 
 # ── Action: inspect logs ───────────────────────────────────────────────────────
 
