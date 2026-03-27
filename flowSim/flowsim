@@ -91,18 +91,19 @@ def _supports_raw() -> bool:
 def _read_key() -> str:
     """Block until a keypress; return a normalized string."""
     if sys.platform != "win32":
+        import os as _os
         import tty, termios
         import select as _sel
         fd = sys.stdin.fileno()
         old = termios.tcgetattr(fd)
         try:
             tty.setraw(fd)
-            ch = sys.stdin.buffer.read(1)
+            # Use os.read() directly — bypasses Python's BufferedReader so
+            # pre-buffered bytes can't cause a spurious immediate return.
+            ch = _os.read(fd, 1)
             if ch == b"\x1b":
-                # Read the rest of the escape sequence in the same raw-mode
-                # session — avoids the race condition of restore/re-enter.
-                if _sel.select([sys.stdin], [], [], 0.05)[0]:
-                    rest = sys.stdin.buffer.read(2)
+                if _sel.select([fd], [], [], 0.05)[0]:
+                    rest = _os.read(fd, 2)
                     if rest == b"[A": return "UP"
                     if rest == b"[B": return "DOWN"
                 return "ESC"
@@ -112,13 +113,15 @@ def _read_key() -> str:
     else:
         # Windows (winpty/ConPTY): stdin is a pipe that delivers ANSI sequences.
         # Use threading timeout so a bare Escape key doesn't block forever.
+        import os as _os
         import threading
         import queue as _q
+        fd = sys.stdin.fileno()
 
         def _read_n(n: int, timeout: float) -> bytes:
             q: _q.Queue = _q.Queue()
             threading.Thread(
-                target=lambda: q.put(sys.stdin.buffer.read(n)),
+                target=lambda: q.put(_os.read(fd, n)),
                 daemon=True,
             ).start()
             try:
@@ -130,7 +133,7 @@ def _read_key() -> str:
         if not ch:
             return ""
         if ch == b"\x1b":
-            rest = _read_n(2, 0.05)   # 50 ms — arrives immediately for arrow keys
+            rest = _read_n(2, 0.05)
             if rest == b"[A": return "UP"
             if rest == b"[B": return "DOWN"
             return "ESC"
