@@ -1,0 +1,464 @@
+#!/usr/bin/env python3
+"""flowsim — Interactive CLI for the flowSim toolset."""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).parent
+
+# ── Terminal helpers ───────────────────────────────────────────────────────────
+
+def _c(code: str, text: str) -> str:
+    if not sys.stdout.isatty():
+        return text
+    return f"\033[{code}m{text}\033[0m"
+
+def bold(t):    return _c("1", t)
+def dim(t):     return _c("2", t)
+def cyan(t):    return _c("96", t)
+def green(t):   return _c("92", t)
+def yellow(t):  return _c("93", t)
+def red(t):     return _c("91", t)
+
+def hr():
+    print(dim("─" * 60))
+
+def header(title: str):
+    print()
+    hr()
+    print(bold(f"  {title}"))
+    hr()
+
+def ask(prompt: str, default: str = "") -> str:
+    hint = f" [{default}]" if default else ""
+    try:
+        val = input(f"  {prompt}{hint}: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return default
+    return val if val else default
+
+def ask_required(prompt: str) -> str:
+    while True:
+        val = ask(prompt)
+        if val:
+            return val
+        print(red("  Required. Please enter a value."))
+
+def ask_file(prompt: str, must_exist: bool = True, default: str = "") -> str:
+    while True:
+        val = ask(prompt, default)
+        if not val:
+            print(red("  Required. Please enter a file path."))
+            continue
+        if must_exist and not Path(val).exists():
+            print(red(f"  File not found: {val}"))
+            continue
+        return val
+
+def ask_yn(prompt: str, default: bool = True) -> bool:
+    hint = "Y/n" if default else "y/N"
+    val = ask(f"{prompt} [{hint}]").lower()
+    if not val:
+        return default
+    return val.startswith("y")
+
+def pick_menu(title: str, options: list[tuple[str, str]]) -> str | None:
+    """Display a numbered menu. Returns the key of the chosen option, or None to go back."""
+    print()
+    print(bold(f"  {title}"))
+    print()
+    for i, (key, label) in enumerate(options, 1):
+        print(f"  {cyan(str(i))}.  {label}")
+    print(f"  {dim('0')}.  {dim('Back / Exit')}")
+    print()
+    while True:
+        raw = ask("Select")
+        if raw == "0" or raw == "":
+            return None
+        try:
+            idx = int(raw) - 1
+            if 0 <= idx < len(options):
+                return options[idx][0]
+        except ValueError:
+            pass
+        print(red(f"  Enter a number between 0 and {len(options)}."))
+
+def run(cmd: list[str]) -> int:
+    """Run a subprocess and return its exit code."""
+    print()
+    hr()
+    print(dim(f"  $ {' '.join(cmd)}"))
+    hr()
+    print()
+    result = subprocess.run(cmd)
+    print()
+    return result.returncode
+
+def script(name: str) -> str:
+    return str(SCRIPT_DIR / name)
+
+def load_json(path: str) -> dict | None:
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+# ── Cache helpers ──────────────────────────────────────────────────────────────
+
+CACHE_BASE = Path.home() / ".connecttools" / "flows"
+
+def cached_instances() -> list[str]:
+    if not CACHE_BASE.exists():
+        return []
+    return [d.name for d in sorted(CACHE_BASE.iterdir()) if d.is_dir()]
+
+def cached_flow_names(instance_id: str) -> list[str]:
+    d = CACHE_BASE / instance_id
+    names = []
+    for p in sorted(d.glob("*.json")):
+        if p.name == "manifest.json":
+            continue
+        try:
+            env = json.loads(p.read_text())
+            name = env.get("metadata", {}).get("name", "")
+            if name:
+                names.append(name)
+        except Exception:
+            pass
+    return sorted(names)
+
+def cache_info(instance_id: str) -> str:
+    manifest_path = CACHE_BASE / instance_id / "manifest.json"
+    if not manifest_path.exists():
+        return dim("no cache")
+    try:
+        m = json.loads(manifest_path.read_text())
+        age_days = (
+            __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+            - __import__("datetime").datetime.fromisoformat(m["fetched_at"])
+        ).days
+        return dim(f"{m.get('flow_count','?')} flows, {age_days}d old")
+    except Exception:
+        return dim("cache unreadable")
+
+def pick_instance() -> str | None:
+    instances = cached_instances()
+    if not instances:
+        return ask_required("Instance ID (UUID)")
+    print()
+    print(bold("  Cached instances:"))
+    print()
+    for i, iid in enumerate(instances, 1):
+        info = cache_info(iid)
+        print(f"  {cyan(str(i))}.  {iid}  {info}")
+    print(f"  {cyan('n')}.  Enter a different ID")
+    print(f"  {dim('0')}.  Back")
+    print()
+    while True:
+        raw = ask("Select").strip()
+        if raw == "0" or raw == "":
+            return None
+        if raw.lower() == "n":
+            return ask_required("Instance ID (UUID)")
+        try:
+            idx = int(raw) - 1
+            if 0 <= idx < len(instances):
+                return instances[idx]
+        except ValueError:
+            pass
+        # If they just typed a UUID directly, accept it
+        if len(raw) == 36 and raw.count("-") == 4:
+            return raw
+        print(red("  Enter a number, 'n', or a UUID."))
+
+def pick_flow(instance_id: str) -> str | None:
+    names = cached_flow_names(instance_id)
+    if not names:
+        return ask_required("Starting flow name")
+    print()
+    print(bold("  Flows in cache:"))
+    print()
+    for i, name in enumerate(names, 1):
+        print(f"  {cyan(str(i)):>6}.  {name}")
+    print(f"  {cyan('n')}.  Type a flow name manually")
+    print(f"  {dim('0')}.  Back")
+    print()
+    while True:
+        raw = ask("Select").strip()
+        if raw == "0" or raw == "":
+            return None
+        if raw.lower() == "n":
+            return ask_required("Flow name")
+        try:
+            idx = int(raw) - 1
+            if 0 <= idx < len(names):
+                return names[idx]
+        except ValueError:
+            pass
+        print(red(f"  Enter a number, 'n', or 0 to go back."))
+
+def pick_scenario(default: str = "") -> str | None:
+    # Look for scenario*.json files nearby
+    candidates = sorted(
+        list(Path(".").glob("scenario*.json")) +
+        list(Path(".").glob("scenarios/scenario*.json"))
+    )
+    if not candidates:
+        return ask_file("Scenario JSON file", must_exist=True, default=default) or None
+
+    print()
+    print(bold("  Scenario files found:"))
+    print()
+    for i, p in enumerate(candidates, 1):
+        note = ""
+        d = load_json(str(p))
+        if d:
+            note = dim(f"  {d.get('_note','')[:70]}")
+        print(f"  {cyan(str(i))}.  {p}  {note}")
+    print(f"  {cyan('n')}.  Enter a different path")
+    print(f"  {dim('0')}.  Back")
+    print()
+    while True:
+        raw = ask("Select").strip()
+        if raw == "0" or raw == "":
+            return None
+        if raw.lower() == "n":
+            return ask_file("Scenario JSON file", must_exist=True) or None
+        try:
+            idx = int(raw) - 1
+            if 0 <= idx < len(candidates):
+                return str(candidates[idx])
+        except ValueError:
+            pass
+        print(red("  Enter a number or 'n'."))
+
+# ── Action: map instance ───────────────────────────────────────────────────────
+
+def action_map():
+    header("Map Instance  —  flow_map.py")
+    print("  Scans all flows, builds the attribute/Lambda map, and generates")
+    print("  an HTML report and scenario template.")
+    print()
+
+    instance_id = pick_instance()
+    if not instance_id:
+        return
+
+    instances_with_cache = cached_instances()
+    force_refresh = False
+    if instance_id in instances_with_cache:
+        force_refresh = ask_yn("Cache exists. Force re-fetch from AWS?", default=False)
+
+    region = ""
+    if force_refresh or instance_id not in instances_with_cache:
+        region = ask_required("AWS region (e.g. us-east-1)")
+
+    profile = ask("AWS profile (leave blank for default)", default="")
+    no_html = ask_yn("Generate HTML report?", default=True)
+    no_scenario = ask_yn("Generate scenario template?", default=True)
+
+    cmd = [sys.executable, script("flow_map.py"), "--instance-id", instance_id]
+    if region:
+        cmd += ["--region", region]
+    if profile:
+        cmd += ["--profile", profile]
+    if force_refresh:
+        cmd.append("--force-refresh")
+    if not no_html:
+        cmd.append("--no-html")
+    if not no_scenario:
+        cmd.append("--no-scenario")
+
+    run(cmd)
+
+# ── Action: simulate ───────────────────────────────────────────────────────────
+
+def action_simulate():
+    header("Simulate Flow  —  flow_sim.py")
+    print("  Walk a contact flow step by step using a scenario file.")
+    print()
+
+    instance_id = pick_instance()
+    if not instance_id:
+        return
+
+    if not cached_flow_names(instance_id):
+        print(yellow("  No flow cache found for this instance. Run 'Map Instance' first."))
+        return
+
+    flow_name = pick_flow(instance_id)
+    if not flow_name:
+        return
+
+    scenario = pick_scenario()
+    if not scenario:
+        return
+
+    interactive = ask_yn("Interactive mode (prompt at unresolved forks)?", default=False)
+    save_choices = False
+    if interactive:
+        save_choices = ask_yn("Save choices back to scenario file?", default=False)
+
+    html_default = f"sim_{flow_name.replace(' ','_')}.html"
+    no_html = not ask_yn(f"Generate HTML visualization? [{html_default}]", default=True)
+    html_path = ""
+    if not no_html:
+        custom = ask(f"HTML output path", default=html_default)
+        html_path = custom
+
+    cmd = [
+        sys.executable, script("flow_sim.py"),
+        "--instance-id", instance_id,
+        "--flow", flow_name,
+        "--scenario", scenario,
+    ]
+    if interactive:
+        cmd.append("--interactive")
+    if save_choices:
+        cmd.append("--save-choices")
+    if no_html:
+        cmd.append("--no-html")
+    elif html_path and html_path != html_default:
+        cmd += ["--html", html_path]
+
+    run(cmd)
+
+# ── Action: build scenarios from logs ─────────────────────────────────────────
+
+def action_from_logs():
+    header("Build Scenarios from Logs  —  scenario_from_logs.py")
+    print("  Parse exported CloudWatch flow logs and generate scenario files")
+    print("  pre-filled with real attribute values from actual contacts.")
+    print()
+
+    # Collect log files
+    print(bold("  Log files"))
+    print(dim("  Space-separated paths, or a glob like logs/*.json"))
+    raw_files = ask_required("Log file(s)")
+    import glob as _glob
+    log_files: list[str] = []
+    for part in raw_files.split():
+        expanded = _glob.glob(part)
+        if expanded:
+            log_files.extend(expanded)
+        else:
+            log_files.append(part)
+
+    if not log_files:
+        print(red("  No files found."))
+        return
+
+    print()
+    mode = pick_menu("Output mode", [
+        ("top",    "Top N journeys (one scenario per unique flow path)"),
+        ("merge",  "Merged (single scenario combining all contacts)"),
+        ("single", "Single contact by ID"),
+    ])
+    if mode is None:
+        return
+
+    contact_id = ""
+    top_n = 5
+    if mode == "single":
+        contact_id = ask_required("Contact ID (UUID or prefix)")
+    elif mode == "top":
+        top_n = int(ask("How many top journeys?", default="5") or "5")
+
+    out_dir = ask("Output directory", default=".")
+    anonymize = ask_yn("Anonymize PII in attribute values?", default=False)
+
+    cmd = [sys.executable, script("scenario_from_logs.py")] + log_files
+    cmd += ["--out-dir", out_dir]
+    if mode == "merge":
+        cmd.append("--merge")
+    elif mode == "single":
+        cmd += ["--contact-id", contact_id]
+    else:
+        cmd += ["--top", str(top_n)]
+    if anonymize:
+        cmd.append("--anonymize")
+
+    run(cmd)
+
+# ── Action: inspect logs ───────────────────────────────────────────────────────
+
+def action_inspect_logs():
+    header("Inspect Log File  —  scenario_from_logs.py")
+    print("  Preview what contacts and attributes are in a CW log export")
+    print("  before building scenario files.")
+    print()
+
+    raw_files = ask_required("Log file(s)")
+    import glob as _glob
+    log_files: list[str] = []
+    for part in raw_files.split():
+        expanded = _glob.glob(part)
+        if expanded:
+            log_files.extend(expanded)
+        else:
+            log_files.append(part)
+
+    mode = pick_menu("View", [
+        ("list",    "List contacts with journey summaries"),
+        ("summary", "Attribute key distributions and Lambda ARNs"),
+    ])
+    if mode is None:
+        return
+
+    cmd = [sys.executable, script("scenario_from_logs.py")] + log_files + [f"--{mode}"]
+    run(cmd)
+
+# ── Main menu ──────────────────────────────────────────────────────────────────
+
+def print_banner():
+    print()
+    print(bold(cyan("  ┌─────────────────────────────────────┐")))
+    print(bold(cyan("  │         flowSim  —  Amazon Connect  │")))
+    print(bold(cyan("  │         Contact Flow Simulator      │")))
+    print(bold(cyan("  └─────────────────────────────────────┘")))
+    print()
+    instances = cached_instances()
+    if instances:
+        print(dim(f"  Cached instances: {', '.join(instances)}"))
+    else:
+        print(dim("  No local cache yet. Start with 'Map Instance'."))
+    print()
+
+MENU = [
+    ("map",        "Map instance              — scan all flows, build report + scenario template"),
+    ("simulate",   "Simulate flow             — walk a flow with a scenario file"),
+    ("from_logs",  "Build scenarios from logs — extract real values from CW exports"),
+    ("inspect",    "Inspect log file          — preview contacts and attributes in a CW export"),
+]
+
+ACTIONS = {
+    "map":        action_map,
+    "simulate":   action_simulate,
+    "from_logs":  action_from_logs,
+    "inspect":    action_inspect_logs,
+}
+
+def main():
+    while True:
+        print_banner()
+        choice = pick_menu("What would you like to do?", MENU)
+        if choice is None:
+            print(dim("  Goodbye."))
+            print()
+            sys.exit(0)
+        ACTIONS[choice]()
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print()
+        print(dim("  Interrupted."))
+        print()
+        sys.exit(0)

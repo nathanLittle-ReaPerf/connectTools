@@ -245,7 +245,9 @@ def _extract_lambda_data(event: dict) -> dict | None:
 def _extract_dtmf(event: dict) -> dict | None:
     """Extract DTMF / GetUserInput press from a log event."""
     params = event.get("Parameters", {}) or {}
-    results = event.get("Results", {}) or {}
+    results = event.get("Results", {})
+    if not isinstance(results, dict):
+        results = {}
 
     pressed = (results.get("Pressed") or results.get("DTMFInput")
                or params.get("StoredCustomerInput") or "")
@@ -267,7 +269,9 @@ def _extract_dtmf(event: dict) -> dict | None:
 def _extract_hours_check(event: dict) -> dict | None:
     """Extract hours-of-operation check result."""
     params = event.get("Parameters", {}) or {}
-    results = event.get("Results", {}) or {}
+    results = event.get("Results", {})
+    if not isinstance(results, dict):
+        results = {}
 
     hoo_id = params.get("HoursOfOperationId") or params.get("HoursOfOperationArn") or ""
     in_hours = results.get("InHours") or results.get("CurrentStatus") or ""
@@ -283,7 +287,9 @@ def _extract_hours_check(event: dict) -> dict | None:
 def _extract_staffing_check(event: dict) -> dict | None:
     """Extract check-staffing result."""
     params = event.get("Parameters", {}) or {}
-    results = event.get("Results", {}) or {}
+    results = event.get("Results", {})
+    if not isinstance(results, dict):
+        results = {}
 
     queue_id = params.get("QueueId") or params.get("QueueArn") or ""
     channel = params.get("Channel") or ""
