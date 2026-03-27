@@ -109,6 +109,76 @@ def load_json(path: str) -> dict | None:
     except Exception:
         return None
 
+# ── Toolbox output directory ───────────────────────────────────────────────────
+# flowSim lives one level below connectTools root (connectTools/flowSim/flowsim)
+TOOLBOX_ROOT = SCRIPT_DIR.parent
+
+def toolbox_output_dir(tool_name: str) -> Path:
+    folder = "".join(w.capitalize() for w in tool_name.split("_"))
+    return TOOLBOX_ROOT / folder
+
+
+def pick_log_files() -> list[str] | None:
+    """Let user select one or more CW log export files, browsing ContactLogs/ if present."""
+    import glob as _glob
+
+    contact_logs_dir = toolbox_output_dir("contact_logs")
+    candidates: list[Path] = []
+    if contact_logs_dir.exists():
+        candidates = sorted(contact_logs_dir.glob("*.json"), reverse=True)  # newest first
+
+    if candidates:
+        print()
+        print(bold(f"  CW log exports in {contact_logs_dir}:"))
+        print()
+        for i, p in enumerate(candidates, 1):
+            size_kb = p.stat().st_size // 1024
+            print(f"  {cyan(str(i)):>6}.  {p.name}  {dim(f'({size_kb} KB)')}")
+        print(f"  {cyan('n')}.  Enter path(s) manually")
+        print(f"  {dim('0')}.  Back")
+        print()
+        print(dim("  Enter numbers separated by spaces to select multiple (e.g. 1 3 5)"))
+        print()
+
+        while True:
+            raw = ask("Select file(s)").strip()
+            if raw == "0" or raw == "":
+                return None
+            if raw.lower() == "n":
+                break
+            parts = raw.split()
+            selected: list[str] = []
+            valid = True
+            for p in parts:
+                try:
+                    idx = int(p) - 1
+                    if 0 <= idx < len(candidates):
+                        selected.append(str(candidates[idx]))
+                    else:
+                        print(red(f"  Number out of range: {p}"))
+                        valid = False
+                        break
+                except ValueError:
+                    print(red(f"  Not a number: {p}"))
+                    valid = False
+                    break
+            if valid and selected:
+                return selected
+
+    # Manual entry fallback
+    print()
+    print(dim("  Enter one or more file paths, space-separated, or a glob (e.g. logs/*.json)"))
+    raw = ask_required("Log file(s)")
+    log_files: list[str] = []
+    for part in raw.split():
+        expanded = _glob.glob(part)
+        if expanded:
+            log_files.extend(expanded)
+        else:
+            log_files.append(part)
+    return log_files if log_files else None
+
+
 # ── Cache helpers ──────────────────────────────────────────────────────────────
 
 CACHE_BASE = Path.home() / ".connecttools" / "flows"
@@ -337,22 +407,10 @@ def action_from_logs():
     print("  pre-filled with real attribute values from actual contacts.")
     print()
 
-    # Collect log files
-    print(bold("  Log files"))
-    print(dim("  Space-separated paths, or a glob like logs/*.json"))
-    raw_files = ask_required("Log file(s)")
-    import glob as _glob
-    log_files: list[str] = []
-    for part in raw_files.split():
-        expanded = _glob.glob(part)
-        if expanded:
-            log_files.extend(expanded)
-        else:
-            log_files.append(part)
-
+    log_files = pick_log_files()
     if not log_files:
-        print(red("  No files found."))
         return
+    print(green(f"  {len(log_files)} file(s) selected."))
 
     print()
     mode = pick_menu("Output mode", [
@@ -394,15 +452,10 @@ def action_inspect_logs():
     print("  before building scenario files.")
     print()
 
-    raw_files = ask_required("Log file(s)")
-    import glob as _glob
-    log_files: list[str] = []
-    for part in raw_files.split():
-        expanded = _glob.glob(part)
-        if expanded:
-            log_files.extend(expanded)
-        else:
-            log_files.append(part)
+    log_files = pick_log_files()
+    if not log_files:
+        return
+    print(green(f"  {len(log_files)} file(s) selected."))
 
     mode = pick_menu("View", [
         ("list",    "List contacts with journey summaries"),

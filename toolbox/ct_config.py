@@ -6,7 +6,21 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-CONFIG_FILE = Path.home() / ".connecttools" / "config.json"
+CONFIG_FILE  = Path.home() / ".connecttools" / "config.json"
+# Root of the connectTools repo (parent of the toolbox/ directory)
+TOOLBOX_ROOT = Path(__file__).parent.parent
+
+
+def output_dir(tool_name: str) -> Path:
+    """Return (and create) the output directory for a tool.
+
+    Converts tool_name to PascalCase folder under TOOLBOX_ROOT.
+    e.g. 'contact_logs' → <connectTools>/ContactLogs/
+    """
+    folder = "".join(w.capitalize() for w in tool_name.replace(".py", "").split("_"))
+    d = TOOLBOX_ROOT / folder
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 # Ordered list of (key, display_label) for all configurable fields
 FIELDS = [

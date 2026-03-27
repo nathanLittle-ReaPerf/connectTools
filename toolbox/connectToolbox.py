@@ -27,6 +27,16 @@ LOG_FILE    = Path.home() / "logs" / "connecttools.log"
 _cfg = ct_config.load()
 
 
+def _today() -> str:
+    return dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def _out(tool: str, stem: str, ext: str) -> str:
+    """Return a default output path in the tool's named output directory."""
+    safe = re.sub(r"[^\w\-.]", "_", stem)[:80]
+    return str(ct_config.output_dir(tool) / f"{safe}.{ext.lstrip('.')}")
+
+
 _PLACEHOLDER_RE = re.compile(r"{\s*([A-Za-z_][A-Za-z0-9_]*)\s*}")
 
 
@@ -412,7 +422,9 @@ def tool_lambda_errors():
     else:
         args += ["--period", period_choice]
 
-    csv_out = ask("CSV output file (leave blank to print)", required=False)
+    fn_slug = re.sub(r"[^\w\-]", "_", fn or "errors")
+    csv_out = ask("CSV output file", required=False,
+                  default=_out("lambda_errors", f"{fn_slug}_{_today()}", "csv"))
     if csv_out: args += ["--csv", csv_out]
 
     _run("lambda_errors.py", args)
@@ -454,7 +466,8 @@ CID_JOURNEY_QUESTIONS = [
 AGENT_LIST_QUESTIONS = [
     {"label": "Search username (leave blank for all)", "arg": "--search", "required": False},
     {"label": "Filter by routing profile name", "arg": "--routing-profile", "required": False},
-    {"label": "Output CSV file (leave blank to print table)", "arg": "--csv", "required": False},
+    {"label": "Output CSV file", "arg": "--csv", "required": False,
+     "default_fn": lambda: _out("agent_list", _today(), "csv")},
 ]
 
 def tool_runner(tool_name: str, script_name: str, questions: list, connect_tool: bool = True):
@@ -470,7 +483,10 @@ def tool_runner(tool_name: str, script_name: str, questions: list, connect_tool:
         arg_name = q.get("arg")
         required = q.get("required", False)
         default = q.get("default", "")
-        
+        default_fn = q.get("default_fn")
+        if callable(default_fn):
+            default = default_fn()
+
         val = None
 
         if q_type == "date":
@@ -572,7 +588,8 @@ def tool_contact_search():
     if limit:
         args += ["--limit", limit]
 
-    output = ask("Output CSV file", required=False)
+    output = ask("Output CSV file", required=False,
+                 default=_out("contact_search", _today(), "csv"))
     if output:
         args += ["--output", output]
 
@@ -590,7 +607,8 @@ def tool_contact_logs():
     cid       = ask("Contact ID")
     log_group = ask("Log group", required=False, default=ct_config.get_log_group(iid))
     fmt       = ask_choice("Output format", ["json", "text"], default="json")
-    output    = ask("Output file", required=False)
+    output    = ask("Output file", required=False,
+                    default=_out("contact_logs", cid, fmt))
 
     if log_group and log_group != ct_config.get_log_group(iid):
         if ask_bool("Save log group for this instance?", default=True):
@@ -611,7 +629,8 @@ def tool_lambda_tracer():
     iid, region, profile = ask_connect_defaults()
     cid       = ask("Contact ID")
     log_group = ask("Log group", required=False, default=ct_config.get_log_group(iid))
-    output    = ask("Output file (leave blank to print)", required=False)
+    output    = ask("Output file", required=False,
+                    default=_out("lambda_tracer", cid, "json"))
 
     if log_group and log_group != ct_config.get_log_group(iid):
         if ask_bool("Save log group for this instance?", default=True):
@@ -670,7 +689,8 @@ def tool_export_flow():
 
     name   = ask("Flow name")
     exact  = ask_bool("Exact name match?")
-    output = ask("Output file", required=False)
+    output = ask("Output file", required=False,
+                 default=_out("export_flow", name.replace(" ", "_"), "json"))
 
     args = connect_args(iid, region, profile) + ["--name", name]
     if exact:  args += ["--exact"]
@@ -698,7 +718,8 @@ def tool_flow_attr_search():
         paths = raw.split()
         fmt    = ask_choice("Output format", ["text", "json"], default="text")
         detail = ask_bool("Show per-block detail?") if fmt == "text" else False
-        output = ask("Save to file (leave blank to print)", required=False)
+        output = ask("Save to file", required=False,
+                     default=_out("flow_attr_search", attr, "json" if fmt == "json" else "txt"))
         args   = paths
         if detail:        args += ["--detail"]
         if fmt == "json": args += ["--json"]
@@ -726,7 +747,8 @@ def tool_flow_attr_search():
         if detail: args += ["--detail"]
     if fmt == "json": args += ["--json"]
 
-    output = ask("Save to file (leave blank to print)", required=False)
+    output = ask("Save to file", required=False,
+                 default=_out("flow_attr_search", attr, "json" if fmt == "json" else "txt"))
     if output: args += ["--output", output]
 
     _run("flow_attr_search.py", args)
@@ -764,7 +786,8 @@ def tool_flow_usage():
             args += ["--start", start]
             if end: args += ["--end", end]
 
-    csv_out = ask("CSV output file (leave blank to print)", required=False)
+    csv_out = ask("CSV output file", required=False,
+                  default=_out("flow_usage", _today(), "csv"))
     if csv_out: args += ["--csv", csv_out]
 
     _run("flow_usage.py", args)
@@ -810,7 +833,8 @@ def tool_orphaned_resources():
     _header("Orphaned Resources")
     iid, region, profile = ask_connect_defaults()
     check_lambdas = ask_bool("Verify Lambda ARNs exist? (requires lambda:GetFunction)")
-    csv_out       = ask("CSV output file (leave blank to print)", required=False)
+    csv_out       = ask("CSV output file", required=False,
+                        default=_out("orphaned_resources", _today(), "csv"))
 
     args = connect_args(iid, region, profile)
     if check_lambdas: args += ["--check-lambdas"]
@@ -957,13 +981,13 @@ def tool_log_insights():
     log_group = ask("Log group",  required=False)
     limit     = ask("Max rows",   required=False, default="1000")
 
-    # Auto-name output for CID searches: CID-<value>_YYYY-MM-DD.xlsx
+    # Auto-name output for CID searches; otherwise default to LogInsights folder
     if "CID" in ph_values:
-        import datetime as _dt
-        today  = _dt.date.today().strftime("%Y-%m-%d")
-        output = f"CID-{ph_values['CID']}_{today}.xlsx"
+        cid_val = ph_values["CID"]
+        output  = _out("log_insights", f"CID-{cid_val}_{_today()}", "xlsx")
     else:
-        output = ask("Output file", required=False)
+        output = ask("Output file", required=False,
+                     default=_out("log_insights", _today(), "xlsx"))
 
     # ── Build and run ─────────────────────────────────────────────────────────
     args = ["--query", str(query_path)] + var_args + time_args
@@ -977,7 +1001,7 @@ def tool_log_insights():
     # After a CID_Search run, offer to generate the journey map
     if "CID" in ph_values and output and output.endswith(".xlsx"):
         if ask_bool("Generate journey map from this xlsx?"):
-            map_output = output.replace(".xlsx", "_journey.html")
+            map_output = str(ct_config.output_dir("cid_journey") / (Path(output).stem + "_journey.html"))
             _run("cid_journey.py", [output, "--output", map_output])
 
 
@@ -1011,7 +1035,8 @@ def tool_agent_activity():
         login = ask("Agent login")
         args += ["--agent", login]
 
-    output = ask("Output CSV file", required=False)
+    output = ask("Output CSV file", required=False,
+                 default=_out("agent_activity", _today(), "csv"))
     if output:
         args += ["--output", output]
 
@@ -1031,7 +1056,8 @@ def tool_routing_profile_audit():
     _header("Routing Profile Audit")
     iid, region, profile = ask_connect_defaults()
     name   = ask("Filter by profile name (leave blank for all)", required=False)
-    output = ask("CSV output file (leave blank to print)", required=False)
+    output = ask("CSV output file", required=False,
+                 default=_out("routing_profile_audit", _today(), "csv"))
 
     args = connect_args(iid, region, profile)
     if name:   args += ["--name",   name]
@@ -1048,7 +1074,9 @@ def tool_security_profile_diff():
     sp_a   = ask("First security profile name (A)")
     sp_b   = ask("Second security profile name (B)")
     show_all = ask_bool("Show shared permissions too?", default=False)
-    output = ask("CSV output file (leave blank to print)", required=False)
+    sp_slug  = re.sub(r"[^\w\-]", "_", f"{sp_a}_vs_{sp_b}")
+    output   = ask("CSV output file", required=False,
+                   default=_out("security_profile_diff", sp_slug, "csv"))
 
     args = connect_args(iid, region, profile)
     args += ["--profile-a", sp_a, "--profile-b", sp_b]
@@ -1090,7 +1118,8 @@ def tool_phone_numbers():
     if flow_filter: args += ["--flow", flow_filter]
     if unassigned:  args += ["--unassigned"]
 
-    csv_out = ask("CSV output file (leave blank to print)", required=False)
+    csv_out = ask("CSV output file", required=False,
+                  default=_out("phone_numbers", _today(), "csv"))
     if csv_out: args += ["--csv", csv_out]
 
     _run("phone_numbers.py", args)
