@@ -930,7 +930,8 @@ examples:
   %(prog)s contacts.json --anonymize
         """,
     )
-    p.add_argument("log_files", nargs="+", metavar="LOG_FILE", help="CloudWatch export file(s)")
+    p.add_argument("log_files", nargs="*", metavar="LOG_FILE",
+                   help="CloudWatch export file(s). Omit to auto-load all files from flowSim/Logs/.")
     p.add_argument("--out-dir",      default=str(SCENARIOS_DIR), metavar="DIR",
                    help="Output directory (default: flowSim/Scenarios/)")
     p.add_argument("--archetypes",   action="store_true",
@@ -945,6 +946,21 @@ examples:
     p.add_argument("--summary",      action="store_true",           help="Print attribute/lambda summary")
     p.add_argument("--json",         action="store_true",           help="Print parsed data as JSON")
     args = p.parse_args()
+
+    if not args.log_files:
+        logs_dir = Path(__file__).parent / "Logs"
+        found = sorted(logs_dir.glob("*.json")) if logs_dir.exists() else []
+        if not found:
+            print(
+                f"No log files specified and no files found in {logs_dir}.\n"
+                "Run export_flow_logs.py first, or pass file paths explicitly.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        args.log_files = [str(f) for f in found]
+        print(f"Auto-discovered {len(args.log_files)} file(s) from {logs_dir}:", file=sys.stderr)
+        for f in args.log_files:
+            print(f"  {Path(f).name}", file=sys.stderr)
 
     print(f"Loading {len(args.log_files)} file(s)...", file=sys.stderr)
     events = load_all_events(args.log_files)
