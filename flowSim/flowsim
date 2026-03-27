@@ -403,12 +403,12 @@ def pick_scenario(default: str = "") -> str | None:
     scenarios_dir = SCRIPT_DIR / "Scenarios"
     candidates: list[Path] = []
     if scenarios_dir.exists():
-        seen: set[str] = set()
-        for pat in ("scenario*.json", "archetype*.json"):
-            for p in sorted(scenarios_dir.glob(pat)):
-                if p.name not in seen:
-                    candidates.append(p)
-                    seen.add(p.name)
+        # rglob picks up instance-id subdirs (from_logs, flow_walk) and root-level files
+        candidates = sorted(
+            scenarios_dir.rglob("*.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
         candidates.sort(key=lambda p: p.name)
 
     if not candidates:
@@ -426,6 +426,42 @@ def pick_scenario(default: str = "") -> str | None:
     if choice == "_manual":
         return ask_file("Scenario JSON file", must_exist=True) or None
     return choice
+
+# ── Action: walk flow interactively ───────────────────────────────────────────
+
+def action_walk():
+    header("Walk Flow Interactively  —  flow_walk.py")
+    print("  Step through a contact flow live — answer DTMF prompts, hours")
+    print("  checks, staffing checks, and Lambda invocations as they appear.")
+    print("  Save the session as a scenario file when done.")
+    print()
+
+    instance_id = pick_instance()
+    if not instance_id:
+        return
+
+    if not cached_flow_names(instance_id):
+        print(yellow("  No flow cache found for this instance. Run 'Map Instance' first."))
+        return
+
+    flow_name = pick_flow(instance_id)
+    if not flow_name:
+        return
+
+    ani  = ask("Caller number (ANI)", default="+15551234567")
+    dnis = ask("Dialed number (DNIS)", default="")
+
+    cmd = [
+        sys.executable, script("flow_walk.py"),
+        "--instance-id", instance_id,
+        "--flow", flow_name,
+    ]
+    if ani:
+        cmd += ["--ani", ani]
+    if dnis:
+        cmd += ["--dnis", dnis]
+
+    run(cmd)
 
 # ── Action: map instance ───────────────────────────────────────────────────────
 
@@ -798,6 +834,7 @@ def print_banner():
 MENU = [
     ("map",         "Map instance              — scan all flows, build report + scenario template"),
     ("export_logs", "Export flow logs          — pull CW logs to flowSim/Logs/ for scenario building"),
+    ("walk",        "Walk flow interactively   — step through a flow live, answering prompts as they appear"),
     ("simulate",    "Simulate flow             — walk a flow with a scenario file"),
     ("from_logs",   "Build scenarios from logs — extract real values from CW exports"),
     ("inspect",     "Inspect log file          — preview contacts and attributes in a CW export"),
@@ -806,6 +843,7 @@ MENU = [
 ACTIONS = {
     "map":         action_map,
     "export_logs": action_export_logs,
+    "walk":        action_walk,
     "simulate":    action_simulate,
     "from_logs":   action_from_logs,
     "inspect":     action_inspect_logs,
