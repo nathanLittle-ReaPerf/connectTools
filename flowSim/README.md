@@ -19,8 +19,9 @@ DescribeContactFlow  →    ~/.connecttools/flows/  →  Fill in values
 For building scenarios from real contacts instead of filling in the template by hand, use `scenario_from_logs.py`:
 
 ```
-CloudWatch export   →   scenario_from_logs.py   →   scenario_<N>_<flow>.json
-(real contact logs)      extracts real values         ready for flow_sim.py
+export_flow_logs.py  →   flowSim/Logs/          →   scenario_from_logs.py   →   Scenarios/
+(pulls CW logs            logs_YYYYMMDD.json          extracts real values        ready for
+ by date range)                                        or builds archetypes        flow_sim.py
 ```
 
 ---
@@ -83,8 +84,12 @@ Outputs a step trace to the terminal and `sim_Main_IVR.html` — a split-panel v
 ### Alternative: build scenarios from real CloudWatch logs
 
 ```bash
-# Export logs from CloudWatch, then generate top-N journey scenarios:
-python scenario_from_logs.py contacts.json
+# Step 1 — Export logs from your Connect instance
+python export_flow_logs.py --instance-id <UUID> --region us-east-1
+# Saves to flowSim/Logs/logs_<date>.json (default: yesterday, up to 100 contacts)
+
+# Step 2 — Build scenarios from the export
+python scenario_from_logs.py Logs/logs_<date>.json
 
 # Merge all contacts into one representative scenario:
 python scenario_from_logs.py contacts.json --merge
@@ -106,6 +111,7 @@ The archetype mode cross-references your real contact data against the decision 
 | Script | Purpose |
 |---|---|
 | [`flow_map.py`](flow_map.md) | Scan all flows; build attribute map and scenario template |
+| [`export_flow_logs.py`](export_flow_logs.md) | Pull contact flow logs from CloudWatch by date range |
 | [`flow_sim.py`](flow_sim.md) | Simulate a contact path using a scenario file |
 | [`scenario_from_logs.py`](scenario_from_logs.md) | Build scenario files from real CloudWatch log exports |
 
@@ -117,6 +123,12 @@ The archetype mode cross-references your real contact data against the decision 
 ```
 connect:ListContactFlows
 connect:DescribeContactFlow
+```
+
+`export_flow_logs.py` additionally requires:
+```
+connect:DescribeInstance
+logs:FilterLogEvents on /aws/connect/<instance-alias>
 ```
 
 `flow_sim.py` and `scenario_from_logs.py` make **no AWS API calls** — they work entirely from local files.

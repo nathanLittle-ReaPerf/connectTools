@@ -119,21 +119,30 @@ def toolbox_output_dir(tool_name: str) -> Path:
 
 
 def pick_log_files() -> list[str] | None:
-    """Let user select one or more CW log export files, browsing ContactLogs/ if present."""
+    """Let user select one or more CW log export files.
+
+    Browses flowSim/Logs/ (exports from export_flow_logs.py) and
+    connectTools/ContactLogs/ (exports from the toolbox), newest first.
+    """
     import glob as _glob
 
-    contact_logs_dir = toolbox_output_dir("contact_logs")
+    own_logs_dir     = SCRIPT_DIR / "Logs"
+    toolbox_logs_dir = toolbox_output_dir("contact_logs")
+
     candidates: list[Path] = []
-    if contact_logs_dir.exists():
-        candidates = sorted(contact_logs_dir.glob("*.json"), reverse=True)  # newest first
+    if own_logs_dir.exists():
+        candidates += sorted(own_logs_dir.glob("*.json"), reverse=True)
+    if toolbox_logs_dir.exists():
+        candidates += sorted(toolbox_logs_dir.glob("*.json"), reverse=True)
 
     if candidates:
         print()
-        print(bold(f"  CW log exports in {contact_logs_dir}:"))
+        print(bold("  Available log exports:"))
         print()
         for i, p in enumerate(candidates, 1):
             size_kb = p.stat().st_size // 1024
-            print(f"  {cyan(str(i)):>6}.  {p.name}  {dim(f'({size_kb} KB)')}")
+            source  = dim("flowSim") if own_logs_dir in p.parents else dim("toolbox")
+            print(f"  {cyan(str(i)):>6}.  {p.name}  {dim(f'({size_kb} KB)')}  {source}")
         print(f"  {cyan('n')}.  Enter path(s) manually")
         print(f"  {dim('0')}.  Back")
         print()
@@ -457,6 +466,66 @@ def action_from_logs():
 
     run(cmd)
 
+# ── Action: export logs ────────────────────────────────────────────────────────
+
+def action_export_logs():
+    header("Export Flow Logs  —  export_flow_logs.py")
+    print("  Fetch Amazon Connect contact flow logs from CloudWatch and save")
+    print("  them to flowSim/Logs/ ready for the scenario builder.")
+    print()
+
+    instance_id = pick_instance()
+    if not instance_id:
+        return
+
+    region = ask_required("AWS region (e.g. us-east-1)")
+    profile = ask("AWS profile (leave blank for default)", default="")
+
+    print()
+    time_choice = pick_menu("Time range", [
+        ("yesterday", "Yesterday (previous calendar day, UTC)"),
+        ("last_week", "Last 7 days"),
+        ("last",      "Rolling window (e.g. 4h, 2d)"),
+        ("custom",    "Custom start / end dates"),
+    ])
+    if time_choice is None:
+        return
+
+    time_args: list[str] = []
+    if time_choice == "yesterday":
+        time_args = ["--yesterday"]
+    elif time_choice == "last_week":
+        time_args = ["--last-week"]
+    elif time_choice == "last":
+        duration = ask_required("Duration (e.g. 4h, 2d, 1w)")
+        time_args = ["--last", duration]
+    elif time_choice == "custom":
+        start = ask_required("Start date/time (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS UTC)")
+        end   = ask("End date/time (leave blank for now)", default="")
+        time_args = ["--start", start]
+        if end:
+            time_args += ["--end", end]
+
+    max_raw = ask("Max contacts to export (default 100; 0 for unlimited)", default="100")
+    try:
+        max_contacts = int(max_raw)
+    except ValueError:
+        max_contacts = 100
+
+    out_dir = ask("Output directory", default=str(SCRIPT_DIR / "Logs"))
+
+    cmd = [
+        sys.executable, script("export_flow_logs.py"),
+        "--instance-id", instance_id,
+        "--region", region,
+    ]
+    if profile:
+        cmd += ["--profile", profile]
+    cmd += time_args
+    cmd += ["--max", str(max_contacts), "--out-dir", out_dir]
+
+    run(cmd)
+
 # ── Action: inspect logs ───────────────────────────────────────────────────────
 
 def action_inspect_logs():
@@ -497,17 +566,19 @@ def print_banner():
     print()
 
 MENU = [
-    ("map",        "Map instance              — scan all flows, build report + scenario template"),
-    ("simulate",   "Simulate flow             — walk a flow with a scenario file"),
-    ("from_logs",  "Build scenarios from logs — extract real values from CW exports"),
-    ("inspect",    "Inspect log file          — preview contacts and attributes in a CW export"),
+    ("map",         "Map instance              — scan all flows, build report + scenario template"),
+    ("export_logs", "Export flow logs          — pull CW logs to flowSim/Logs/ for scenario building"),
+    ("simulate",    "Simulate flow             — walk a flow with a scenario file"),
+    ("from_logs",   "Build scenarios from logs — extract real values from CW exports"),
+    ("inspect",     "Inspect log file          — preview contacts and attributes in a CW export"),
 ]
 
 ACTIONS = {
-    "map":        action_map,
-    "simulate":   action_simulate,
-    "from_logs":  action_from_logs,
-    "inspect":    action_inspect_logs,
+    "map":         action_map,
+    "export_logs": action_export_logs,
+    "simulate":    action_simulate,
+    "from_logs":   action_from_logs,
+    "inspect":     action_inspect_logs,
 }
 
 def main():
