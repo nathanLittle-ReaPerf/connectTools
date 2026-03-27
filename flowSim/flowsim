@@ -68,12 +68,117 @@ def ask_yn(prompt: str, default: bool = True) -> bool:
         return default
     return val.startswith("y")
 
+# ── Arrow-key input ────────────────────────────────────────────────────────────
+
+def _supports_raw() -> bool:
+    """True if the terminal supports raw keystroke input."""
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        return False
+    try:
+        import tty, termios  # noqa: F401
+        return True
+    except ImportError:
+        pass
+    if sys.platform == "win32":
+        try:
+            import msvcrt  # noqa: F401
+            return True
+        except ImportError:
+            pass
+    return False
+
+
+def _read_key() -> str:
+    """Block until a keypress; return a normalized string."""
+    if sys.platform != "win32":
+        import tty, termios
+        import select as _sel
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            ch = sys.stdin.buffer.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        if ch == b"\x1b":
+            old2 = termios.tcgetattr(fd)
+            try:
+                tty.setraw(fd)
+                if _sel.select([sys.stdin], [], [], 0.1)[0]:
+                    seq = sys.stdin.buffer.read(2)
+                    if seq == b"[A": return "UP"
+                    if seq == b"[B": return "DOWN"
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old2)
+            return "ESC"
+        return ch.decode("utf-8", errors="replace")
+    else:
+        import msvcrt
+        ch = msvcrt.getwch()
+        if ch in ("\x00", "\xe0"):
+            ch2 = msvcrt.getwch()
+            return {"H": "UP", "P": "DOWN"}.get(ch2, "")
+        return ch
+
+
 def pick_menu(title: str, options: list[tuple[str, str]]) -> str | None:
-    """Display a numbered menu. Returns the key of the chosen option, or None to go back."""
+    """Arrow-key menu with numbered fallback when raw input is unavailable."""
+    if not options:
+        return None
+    if not _supports_raw():
+        return _pick_menu_numbered(title, options)
+
+    n = len(options)
+    sel = 0
+    first_draw = True
+
+    def render() -> None:
+        nonlocal first_draw
+        lines = [
+            "",
+            bold(f"  {title}"),
+            "",
+        ]
+        for i, (_, label) in enumerate(options):
+            if i == sel:
+                lines.append(f"  {green('▶')}  {bold(label)}")
+            else:
+                lines.append(f"     {label}")
+        lines.append(dim("  ↑ ↓  move    Enter  select    0 · Esc  back"))
+
+        if not first_draw:
+            sys.stdout.write(f"\x1b[{len(lines)}A")
+        for line in lines:
+            sys.stdout.write(f"\x1b[2K{line}\n")
+        sys.stdout.flush()
+        first_draw = False
+
+    render()
+    while True:
+        k = _read_key()
+        if k == "UP":
+            sel = (sel - 1) % n
+            render()
+        elif k == "DOWN":
+            sel = (sel + 1) % n
+            render()
+        elif k in ("\r", "\n"):
+            print()
+            return options[sel][0]
+        elif k in ("0", "ESC", "q"):
+            print()
+            return None
+        elif k == "\x03":  # Ctrl+C
+            print()
+            raise KeyboardInterrupt
+
+
+def _pick_menu_numbered(title: str, options: list[tuple[str, str]]) -> str | None:
+    """Numbered fallback when arrow-key input is unavailable."""
     print()
     print(bold(f"  {title}"))
     print()
-    for i, (key, label) in enumerate(options, 1):
+    for i, (_, label) in enumerate(options, 1):
         print(f"  {cyan(str(i))}.  {label}")
     print(f"  {dim('0')}.  {dim('Back / Exit')}")
     print()
