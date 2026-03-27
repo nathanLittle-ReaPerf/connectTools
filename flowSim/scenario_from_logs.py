@@ -151,14 +151,16 @@ def _extract_messages(path: str) -> list[str]:
     return messages
 
 
-def _parse_message(msg: str) -> dict | None:
-    """Parse a single log message string into a structured event dict."""
+def _parse_message(msg) -> dict | None:
+    """Parse a single log message (string or already-parsed dict) into a structured event dict."""
+    if isinstance(msg, dict):
+        return msg if "ContactId" in msg else None
     try:
         obj = json.loads(msg)
         if not isinstance(obj, dict) or "ContactId" not in obj:
             return None
         return obj
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, TypeError):
         return None
 
 
