@@ -162,7 +162,7 @@ def _accumulate_agent_metric(resp: dict, agent_counts: dict[str, int]) -> None:
         if not agent_id:
             continue
         for c in mr.get("Collections", []):
-            if c.get("Metric", {}).get("Name") == "CONTACTS_HANDLED":
+            if c.get("Metric", {}).get("Name") == "CONTACTS_HANDLED_BY_CONNECTED_TO_AGENT":
                 count = int(round(c.get("Value", 0) or 0))
                 agent_counts[agent_id] = agent_counts.get(agent_id, 0) + count
 
@@ -180,7 +180,7 @@ def get_total_handled_by_agent(
             "EndTime":     end,
             "Interval":    {"IntervalPeriod": "TOTAL", "TimeZone": tz},
             "Groupings":   ["AGENT"],
-            "Metrics":     [{"Name": "CONTACTS_HANDLED"}],
+            "Metrics":     [{"Name": "CONTACTS_HANDLED_BY_CONNECTED_TO_AGENT"}],
         }
         if token:
             kwargs["NextToken"] = token
