@@ -83,15 +83,21 @@ Outputs a step trace to the terminal and `sim_Main_IVR.html` — a split-panel v
 ### Alternative: build scenarios from real CloudWatch logs
 
 ```bash
-# Export logs from CloudWatch, then:
+# Export logs from CloudWatch, then generate top-N journey scenarios:
 python scenario_from_logs.py contacts.json
 
-# Or merge all contacts into one representative scenario:
+# Merge all contacts into one representative scenario:
 python scenario_from_logs.py contacts.json --merge
 
-# Or extract a specific contact:
+# Extract a specific contact:
 python scenario_from_logs.py contacts.json --contact-id <UUID>
+
+# Generate named archetype scenarios (Premium, No_Account, Auth_Failed, …)
+# using your flow map cache to identify the decision attributes:
+python scenario_from_logs.py contacts.json --archetypes --instance-id <UUID>
 ```
+
+The archetype mode cross-references your real contact data against the decision points discovered by `flow_map.py` and groups contacts by their combined attribute profile. Each group becomes a named scenario file. A coverage report shows which known attribute/value combinations had no matching contacts — those are gaps worth hand-crafting.
 
 ---
 

@@ -414,19 +414,29 @@ def action_from_logs():
 
     print()
     mode = pick_menu("Output mode", [
-        ("top",    "Top N journeys (one scenario per unique flow path)"),
-        ("merge",  "Merged (single scenario combining all contacts)"),
-        ("single", "Single contact by ID"),
+        ("top",        "Top N journeys (one scenario per unique flow path)"),
+        ("archetypes", "Archetypes (named scenarios by decision-attribute profile)"),
+        ("merge",      "Merged (single scenario combining all contacts)"),
+        ("single",     "Single contact by ID"),
     ])
     if mode is None:
         return
 
     contact_id = ""
     top_n = 5
+    instance_id = ""
     if mode == "single":
         contact_id = ask_required("Contact ID (UUID or prefix)")
     elif mode == "top":
         top_n = int(ask("How many top journeys?", default="5") or "5")
+    elif mode == "archetypes":
+        print()
+        print(dim("  Archetypes uses the flow map cache to find decision attributes."))
+        print(dim("  Run 'Map Instance' first if you haven't already."))
+        print()
+        instance_id = pick_instance() or ""
+        if not instance_id:
+            return
 
     out_dir = ask("Output directory", default=str(SCRIPT_DIR / "Scenarios"))
     anonymize = ask_yn("Anonymize PII in attribute values?", default=False)
@@ -437,6 +447,9 @@ def action_from_logs():
         cmd.append("--merge")
     elif mode == "single":
         cmd += ["--contact-id", contact_id]
+    elif mode == "archetypes":
+        cmd.append("--archetypes")
+        cmd += ["--instance-id", instance_id]
     else:
         cmd += ["--top", str(top_n)]
     if anonymize:

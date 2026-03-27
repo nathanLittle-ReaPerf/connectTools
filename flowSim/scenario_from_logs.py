@@ -54,11 +54,21 @@ OPTIONS
         export JSON, or CW filter-log-events JSON (with "events" array).
 
     --out-dir DIR
-        Directory to write scenario files. Default: current directory.
+        Directory to write scenario files. Default: flowSim/Scenarios/
+
+    --archetypes
+        Build named archetype scenarios using the flow map from the local cache.
+        Groups contacts by their values at key decision attributes (Compare blocks)
+        and names each scenario after the outcome (e.g. No_Account, Premium,
+        Auth_Failed). Requires --instance-id.
+
+    --instance-id UUID
+        Connect instance UUID. Required when using --archetypes to load the
+        flow map cache at ~/.connecttools/flows/<UUID>/.
 
     --merge
-        Merge all contacts into a single scenario file (median/mode values used
-        for each attribute). Default: one file per unique contact journey.
+        Merge all contacts into a single scenario file (most common value per
+        attribute). Default: one file per unique contact journey.
 
     --top N
         When not using --merge, write scenario files for the N most common
@@ -85,6 +95,9 @@ EXAMPLES
     # Parse a CW export and write top-5 scenario files
     python scenario_from_logs.py contacts.json
 
+    # Build named archetype scenarios from the flow decision map
+    python scenario_from_logs.py contacts.json --archetypes --instance-id <UUID>
+
     # Single contact
     python scenario_from_logs.py contacts.json --contact-id <UUID>
 
@@ -102,6 +115,7 @@ EXAMPLES
 """
 
 SCENARIOS_DIR = Path(__file__).parent / "Scenarios"
+CACHE_BASE = Path.home() / ".connecttools" / "flows"
 
 # ── Log parsing ────────────────────────────────────────────────────────────────
 
@@ -706,6 +720,196 @@ def print_list(contacts: dict[str, dict]) -> None:
         print(f"{cid:<36}  {ch:<7}  {na:>5}  {jk[:80]}")
 
 
+# ── Archetype engine ───────────────────────────────────────────────────────────
+
+def _pascal(s: str) -> str:
+    """Convert a string to PascalCase."""
+    return "".join(w.capitalize() for w in re.split(r"[_\s\-]+", str(s)) if w)
+
+
+def _load_decision_attrs(instance_id: str) -> dict[str, list[str]]:
+    """
+    Scan cached flows for Compare blocks.
+    Returns {attr_name: [known_comparison_values]}, ordered by frequency.
+    """
+    cache_dir = CACHE_BASE / instance_id
+    if not cache_dir.exists():
+        return {}
+
+    attr_map: dict[str, dict[str, int]] = {}
+
+    for p in sorted(cache_dir.glob("*.json")):
+        if p.name == "manifest.json":
+            continue
+        try:
+            env   = json.loads(p.read_text(encoding="utf-8"))
+            content = env.get("content") or {}
+            for action in content.get("Actions") or []:
+                if action.get("Type") not in ("Compare", "CheckAttribute", "CheckContactAttributes"):
+                    continue
+                params  = action.get("Parameters") or {}
+                cmp_val = str(params.get("ComparisonValue") or "")
+                m = re.search(r'\$\.Attributes\.([a-zA-Z0-9_]+)', cmp_val)
+                if not m:
+                    continue
+                attr_name = m.group(1)
+                trans = action.get("Transitions") or {}
+                for cond in (trans.get("Conditions") or []):
+                    for op in ((cond.get("Condition") or {}).get("Operands") or []):
+                        if op is not None:
+                            val = str(op).strip()
+                            if attr_name not in attr_map:
+                                attr_map[attr_name] = {}
+                            attr_map[attr_name][val] = attr_map[attr_name].get(val, 0) + 1
+        except Exception:
+            pass
+
+    return {
+        attr: sorted(vals.keys(), key=lambda v: -vals[v])
+        for attr, vals in attr_map.items()
+    }
+
+
+def _contact_profile(contact: dict, decision_attrs: dict[str, list[str]]) -> dict[str, str]:
+    """Return the contact's last-set value for each decision attribute."""
+    profile: dict[str, str] = {}
+    for attr in decision_attrs:
+        vals = contact["attributes"].get(attr, [])
+        profile[attr] = vals[-1] if vals else ""
+    return profile
+
+
+def _archetype_name(profile: dict[str, str]) -> str:
+    """Generate a human-readable scenario name from a decision-attribute profile."""
+    if not profile:
+        return "Default"
+
+    parts = []
+    for attr, val in sorted(profile.items()):
+        val_s     = str(val).strip()
+        val_lower = val_s.lower()
+
+        if not val_lower or val_lower in ("null", "none", "unknown", "not_found", "undefined", ""):
+            parts.append(f"No_{_pascal(attr)}")
+        elif val_lower in ("error", "fail", "failed", "invalid", "denied", "rejected", "notfound"):
+            parts.append(f"{_pascal(attr)}_Failed")
+        elif val_lower in ("false", "no", "0"):
+            parts.append(f"No_{_pascal(attr)}")
+        elif val_lower in ("true", "yes", "1", "success", "valid", "verified", "found", "active"):
+            parts.append(_pascal(attr))
+        else:
+            parts.append(_pascal(val_s[:24]))
+
+    name = "_".join(parts) if parts else "Unknown"
+    return re.sub(r"_+", "_", name).strip("_")
+
+
+def build_archetypes(
+    contacts: dict[str, dict],
+    instance_id: str,
+    anonymize: bool = False,
+) -> tuple[list[dict], dict]:
+    """
+    Group contacts by their decision-attribute profiles (derived from the flow
+    map cache) and build a named scenario for each archetype.
+
+    Returns:
+        (archetype_list, coverage_report)
+        archetype_list: [{"rank", "name", "scenario", "count", "profile"}, ...]
+        coverage_report: {attr: {value: contact_count}}
+    """
+    decision_attrs = _load_decision_attrs(instance_id)
+    if not decision_attrs:
+        return [], {
+            "_error": (
+                f"No flow cache found for instance {instance_id}. "
+                "Run flow_map.py --instance-id <UUID> --region <region> first."
+            )
+        }
+
+    # Group contacts by profile fingerprint
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for contact in contacts.values():
+        profile = _contact_profile(contact, decision_attrs)
+        key = json.dumps(profile, sort_keys=True)
+        groups[key].append(contact)
+
+    # Coverage: how many contacts hit each known attr+value combination
+    coverage: dict[str, dict[str, int]] = {}
+    for attr, known_vals in decision_attrs.items():
+        coverage[attr] = {v: 0 for v in known_vals}
+        coverage[attr][""] = 0  # track "not set" contacts
+    for contact in contacts.values():
+        for attr in decision_attrs:
+            vals = contact["attributes"].get(attr, [])
+            val  = vals[-1] if vals else ""
+            if attr in coverage:
+                coverage[attr][val] = coverage[attr].get(val, 0) + 1
+
+    # Build scenarios sorted by group size (most common archetype first)
+    archetypes = []
+    for rank, (profile_key, group) in enumerate(
+        sorted(groups.items(), key=lambda x: -len(x[1])), 1
+    ):
+        profile  = json.loads(profile_key)
+        name     = _archetype_name(profile)
+        # Pick the contact with the most attribute data as representative
+        rep      = max(group, key=lambda c: len(c["attributes"]))
+        scenario = build_scenario_from_contact(rep, anonymize)
+        profile_desc = ", ".join(
+            f"{k}={v!r}" if v else f"{k}=(not set)"
+            for k, v in sorted(profile.items())
+        )
+        scenario["_note"]          = f"Archetype: {name}. {len(group)} contact(s). Profile: {profile_desc}"
+        scenario["_archetype"]     = name
+        scenario["_profile"]       = profile
+        scenario["_contact_count"] = len(group)
+        archetypes.append({
+            "rank":    rank,
+            "name":    name,
+            "profile": profile,
+            "count":   len(group),
+            "scenario": scenario,
+        })
+
+    return archetypes, coverage
+
+
+def print_archetype_coverage(
+    archetypes: list[dict],
+    coverage: dict,
+    decision_attrs: dict[str, list[str]],
+    n_contacts: int,
+) -> None:
+    """Print a coverage report after building archetypes."""
+    print(f"\n  {len(archetypes)} archetype(s) from {n_contacts} contacts:\n")
+    max_name = max((len(a["name"]) for a in archetypes), default=10)
+    for a in archetypes:
+        profile_str = ", ".join(
+            f"{k}={v!r}" if v else f"{k}=(not set)"
+            for k, v in sorted(a["profile"].items())
+        )
+        print(f"  {a['name']:<{max_name}}  {a['count']:>4}x  {profile_str}")
+
+    print(f"\n  Attribute coverage:\n")
+    for attr in sorted(coverage.keys()):
+        vals = coverage[attr]
+        known = decision_attrs.get(attr, [])
+        print(f"  {attr}:")
+        for val in sorted(vals.keys(), key=lambda v: -vals[v]):
+            count = vals[val]
+            label = f'"{val}"' if val else '"" (not set)'
+            flag  = ""
+            if count == 0 and val in known:
+                flag = "  ← no contacts found"
+            if count > 0:
+                print(f"    {count:>5}x  {label}{flag}")
+        gaps = [v for v in known if vals.get(v, 0) == 0 and v]
+        if gaps:
+            print(f"    {'':>5}   [gap] no contacts with: {', '.join(repr(v) for v in gaps)}")
+    print()
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -727,15 +931,19 @@ examples:
         """,
     )
     p.add_argument("log_files", nargs="+", metavar="LOG_FILE", help="CloudWatch export file(s)")
-    p.add_argument("--out-dir",     default=str(SCENARIOS_DIR), metavar="DIR",
+    p.add_argument("--out-dir",      default=str(SCENARIOS_DIR), metavar="DIR",
                    help="Output directory (default: flowSim/Scenarios/)")
-    p.add_argument("--merge",       action="store_true",           help="Merge all contacts into one scenario")
-    p.add_argument("--top",         default=5,     type=int,       help="Write top N journeys (default: 5)")
-    p.add_argument("--contact-id",  default=None,  metavar="UUID", help="Extract a single contact by ID")
-    p.add_argument("--anonymize",   action="store_true",           help="Redact PII from attribute values")
-    p.add_argument("--list",        action="store_true",           help="List contacts; don't write files")
-    p.add_argument("--summary",     action="store_true",           help="Print attribute/lambda summary")
-    p.add_argument("--json",        action="store_true",           help="Print parsed data as JSON")
+    p.add_argument("--archetypes",   action="store_true",
+                   help="Build named archetype scenarios from flow decision map")
+    p.add_argument("--instance-id",  default=None,  metavar="UUID",
+                   help="Connect instance UUID (required for --archetypes)")
+    p.add_argument("--merge",        action="store_true",           help="Merge all contacts into one scenario")
+    p.add_argument("--top",          default=5,     type=int,       help="Write top N journeys (default: 5)")
+    p.add_argument("--contact-id",   default=None,  metavar="UUID", help="Extract a single contact by ID")
+    p.add_argument("--anonymize",    action="store_true",           help="Redact PII from attribute values")
+    p.add_argument("--list",         action="store_true",           help="List contacts; don't write files")
+    p.add_argument("--summary",      action="store_true",           help="Print attribute/lambda summary")
+    p.add_argument("--json",         action="store_true",           help="Print parsed data as JSON")
     args = p.parse_args()
 
     print(f"Loading {len(args.log_files)} file(s)...", file=sys.stderr)
@@ -786,6 +994,39 @@ examples:
                 return list(o)
             return str(o)
         print(json.dumps({"contacts": list(contacts.values())}, default=serial, indent=2))
+        return
+
+    # ── Archetypes mode ──
+    if args.archetypes:
+        if not args.instance_id:
+            print("Error: --archetypes requires --instance-id.", file=sys.stderr)
+            sys.exit(1)
+        archetypes, coverage = build_archetypes(contacts, args.instance_id, args.anonymize)
+        if not archetypes:
+            err = coverage.get("_error", "No archetypes found.")
+            print(f"Error: {err}", file=sys.stderr)
+            sys.exit(1)
+
+        out_dir = Path(args.out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        written = []
+        for item in archetypes:
+            fname = f"archetype_{item['rank']:02d}_{_safe_filename(item['name'])}.json"
+            path  = out_dir / fname
+            path.write_text(json.dumps(item["scenario"], indent=2), encoding="utf-8")
+            written.append((str(path), item["count"]))
+
+        print(f"\nWrote {len(written)} archetype scenario(s):")
+        for p_str, count in written:
+            print(f"  {p_str}  ({count} contact(s))")
+
+        decision_attrs = _load_decision_attrs(args.instance_id)
+        print_archetype_coverage(archetypes, coverage, decision_attrs, len(contacts))
+
+        print("Run flow_sim.py with one of these files:")
+        if written:
+            print(f"  python flow_sim.py --instance-id {args.instance_id} "
+                  f"--flow \"Main IVR\" --scenario {Path(written[0][0]).name}")
         return
 
     # ── Write scenario files ──
