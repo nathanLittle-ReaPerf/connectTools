@@ -256,14 +256,16 @@ def evaluate(value: str, operator: str, operands: list[str]) -> bool:
     if operator == "EndsWith":
         return any(v.endswith(op) for op in operands)
     _NUM_OPS = {
-        "GreaterThan":               lambda a, b: a > b,
-        "GreaterThanOrEqualTo":      lambda a, b: a >= b,
-        "LessThan":                  lambda a, b: a < b,
-        "LessThanOrEqualTo":         lambda a, b: a <= b,
-        "NumberGreaterThan":         lambda a, b: a > b,
-        "NumberGreaterThanOrEqualTo":lambda a, b: a >= b,
-        "NumberLessThan":            lambda a, b: a < b,
-        "NumberLessThanOrEqualTo":   lambda a, b: a <= b,
+        "GreaterThan":                lambda a, b: a > b,
+        "GreaterThanOrEqualTo":       lambda a, b: a >= b,
+        "LessThan":                   lambda a, b: a < b,
+        "LessThanOrEqualTo":          lambda a, b: a <= b,
+        "NumberGreaterThan":          lambda a, b: a > b,
+        "NumberGreaterThanOrEqualTo": lambda a, b: a >= b,
+        "NumberGreaterOrEqualTo":     lambda a, b: a >= b,
+        "NumberLessThan":             lambda a, b: a < b,
+        "NumberLessThanOrEqualTo":    lambda a, b: a <= b,
+        "NumberLessOrEqualTo":        lambda a, b: a <= b,
     }
     if operator in _NUM_OPS:
         try:
