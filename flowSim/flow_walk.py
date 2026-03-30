@@ -362,9 +362,18 @@ def _walk_block(
 
         # ── On first encounter: establish expected output attribute names ──
         if fn_name not in session.lambda_output_templates:
-            detected = _detect_lambda_outputs(flow_content)
+            # Exclude attrs already claimed by other Lambdas so each function
+            # only owns its own slice of $.External.*
+            already_claimed = {
+                attr
+                for other_fn, tmpl in session.lambda_output_templates.items()
+                if other_fn != fn_name
+                for attr in tmpl
+            }
+            detected = [a for a in _detect_lambda_outputs(flow_content)
+                        if a not in already_claimed]
             if detected:
-                _detail(f"Detected $.External attrs referenced in flow: {', '.join(detected)}")
+                _detail(f"Detected $.External attrs for this function: {', '.join(detected)}")
             suggested = ", ".join(detected)
             raw = _ask("Return attributes (comma-separated, blank for none)", default=suggested)
             template = [a.strip() for a in raw.split(",") if a.strip()] if raw.strip() else []
