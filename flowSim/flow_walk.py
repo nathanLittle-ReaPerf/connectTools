@@ -235,8 +235,10 @@ def _walk_block(
     # ── Transfer to sub-flow ──────────────────────────────────────────────────
     if btype in TRANSFER_TYPES:
         target = params.get("ContactFlowId") or params.get("FlowModuleId") or ""
-        _result(f"→ sub-flow: {target[:40] or '?'}")
-        return "", False, target, f"Transfer to flow: {target[:30] or '?'}", "→ sub-flow"
+        # ARNs look like …:instance/UUID/contact-flow/FLOW-UUID — extract the UUID
+        target_id = target.split("/")[-1] if "/" in target else target
+        _result(f"→ sub-flow: {target_id or '?'}")
+        return "", False, target_id, f"Transfer to flow: {target_id or '?'}", "→ sub-flow"
 
     # ── Set attributes ────────────────────────────────────────────────────────
     if btype in SET_ATTR_TYPES:
@@ -505,7 +507,7 @@ def _walk_flow(
             if sub:
                 _walk_flow(sub, state, session, by_id, by_name, depth + 1)
             else:
-                print(f"\n  {_RD}[Target flow not in cache: {transfer_target[:40]}]{_R}")
+                print(f"\n  {_RD}[Target flow not in cache: {transfer_target}]{_R}")
             break
 
         current_id = next_id
