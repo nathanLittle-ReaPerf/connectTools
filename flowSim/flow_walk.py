@@ -337,6 +337,29 @@ def _walk_block(
             for k, v in lp.items():
                 _detail(f"  {k} = '{v}'")
 
+        # ── Reuse cached response if this Lambda was already called ─────────
+        cached = session.lambda_mocks.get(fn_name)
+        if cached is not None:
+            cached_result = cached.get("result", "Success")
+            cached_attrs  = cached.get("attributes") or {}
+            summary = f"{cached_result}"
+            if cached_attrs:
+                summary += "  " + ", ".join(f"{k}='{v}'" for k, v in list(cached_attrs.items())[:3])
+                if len(cached_attrs) > 3:
+                    summary += f" (+{len(cached_attrs) - 3} more)"
+            _detail(f"[cached] {summary}")
+            if not _ask_bool("Override cached response?", default=False):
+                if cached_result == "Success":
+                    for attr_name, attr_val in cached_attrs.items():
+                        state.external[attr_name] = attr_val
+                        _detail(f"  $.External.{attr_name} = '{attr_val}'", _GR)
+                _result(f"Lambda → {cached_result}", ok=(cached_result == "Success"))
+                desc = f"Lambda '{fn_name}' → {cached_result} (cached)"
+                if cached_result == "Success":
+                    return default_next, False, "", desc, "Success"
+                else:
+                    return error_next or default_next, False, "", desc, "Error"
+
         # ── On first encounter: establish expected output attribute names ──
         if fn_name not in session.lambda_output_templates:
             detected = _detect_lambda_outputs(flow_content)
