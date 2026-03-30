@@ -24,19 +24,21 @@ SCENARIOS_DIR = FLOWSIM_DIR / "Scenarios"
 sys.path.insert(0, str(FLOWSIM_DIR))
 import flow_sim as _fs  # noqa: E402
 
-load_flow_cache = _fs.load_flow_cache
-find_flow       = _fs.find_flow
-SimState        = _fs.SimState
-resolve         = _fs.resolve
-evaluate        = _fs.evaluate
-TYPE_LABELS     = _fs.TYPE_LABELS
-DECISION_TYPES  = _fs.DECISION_TYPES
-TERMINAL_TYPES  = _fs.TERMINAL_TYPES
-LAMBDA_TYPES    = _fs.LAMBDA_TYPES
-SET_ATTR_TYPES  = _fs.SET_ATTR_TYPES
-TRANSFER_TYPES  = _fs.TRANSFER_TYPES
-_block_label    = _fs._block_label
-_cond_label     = _fs._cond_label
+load_flow_cache  = _fs.load_flow_cache
+find_flow        = _fs.find_flow
+SimState         = _fs.SimState
+Step             = _fs.Step
+resolve          = _fs.resolve
+evaluate         = _fs.evaluate
+TYPE_LABELS      = _fs.TYPE_LABELS
+DECISION_TYPES   = _fs.DECISION_TYPES
+TERMINAL_TYPES   = _fs.TERMINAL_TYPES
+LAMBDA_TYPES     = _fs.LAMBDA_TYPES
+SET_ATTR_TYPES   = _fs.SET_ATTR_TYPES
+TRANSFER_TYPES   = _fs.TRANSFER_TYPES
+_block_label     = _fs._block_label
+_cond_label      = _fs._cond_label
+SIMULATIONS_DIR  = _fs.SIMULATIONS_DIR
 
 MAX_DEPTH = 12
 MAX_STEPS = 300
@@ -71,13 +73,14 @@ _KIND_COLOR: dict[str, str] = {
 # ── Walk session (accumulates choices for scenario export) ────────────────────
 @dataclass
 class WalkSession:
-    dtmf_inputs:            dict = field(default_factory=dict)
-    lambda_mocks:           dict = field(default_factory=dict)
-    hours_mocks:            dict = field(default_factory=dict)
-    staffing_mocks:         dict = field(default_factory=dict)
+    dtmf_inputs:            dict       = field(default_factory=dict)
+    lambda_mocks:           dict       = field(default_factory=dict)
+    hours_mocks:            dict       = field(default_factory=dict)
+    staffing_mocks:         dict       = field(default_factory=dict)
     # fn_name → list of $.External attr names expected from that Lambda
-    lambda_output_templates: dict = field(default_factory=dict)
-    step_count:             int  = 0
+    lambda_output_templates: dict      = field(default_factory=dict)
+    path:                   list       = field(default_factory=list)  # list[Step]
+    step_count:             int        = 0
 
 
 # ── Prompt helpers ────────────────────────────────────────────────────────────
@@ -194,10 +197,10 @@ def _walk_block(
     state: SimState,
     session: WalkSession,
     num: int,
-) -> tuple[str, bool, str]:
+) -> tuple[str, bool, str, str, str]:
     """
     Interactively process one block.
-    Returns (next_block_id, is_terminal, transfer_target).
+    Returns (next_block_id, is_terminal, transfer_target, action_desc, branch).
     transfer_target is non-empty for TransferContactToFlow blocks.
     flow_content is the full content dict for the current flow (used to
     detect expected Lambda output attributes).
@@ -221,33 +224,37 @@ def _walk_block(
             q = (params.get("QueueId") or (params.get("Queue") or {}).get("Id") or
                  state.queue or "configured queue")
             _result(f"Transferred to queue: {q}")
+            return "", True, "", f"→ Queue: {q}", ""
         elif btype == "DisconnectParticipant":
             _result("Contact disconnected", ok=False)
+            return "", True, "", "Contact disconnected", ""
         else:
             _result("Flow ended", ok=False)
-        return "", True, ""
+            return "", True, "", "Flow ended", ""
 
     # ── Transfer to sub-flow ──────────────────────────────────────────────────
     if btype in TRANSFER_TYPES:
         target = params.get("ContactFlowId") or params.get("FlowModuleId") or ""
         _result(f"→ sub-flow: {target[:40] or '?'}")
-        return "", False, target
+        return "", False, target, f"Transfer to flow: {target[:30] or '?'}", "→ sub-flow"
 
     # ── Set attributes ────────────────────────────────────────────────────────
     if btype in SET_ATTR_TYPES:
+        parts = []
         for key, val in (params.get("Attributes") or {}).items():
             resolved = resolve(val, state)
             chosen = _ask(f"  {key}", default=resolved)
             state.attributes[key] = chosen
             _detail(f"SET {key} = '{chosen}'", _GR)
-        return default_next, False, ""
+            parts.append(f"{key}='{chosen}'")
+        return default_next, False, "", "SET " + (", ".join(parts) or "(none)"), ""
 
     # ── Set queue ─────────────────────────────────────────────────────────────
     if btype == "SetQueue":
         q = params.get("QueueId") or (params.get("Queue") or {}).get("Id") or ""
         state.queue = q
         _detail(f"Queue → {q or '?'}", _GR)
-        return default_next, False, ""
+        return default_next, False, "", f"Queue → {q or '?'}", ""
 
     # ── Play message ──────────────────────────────────────────────────────────
     if btype == "MessageParticipant":
@@ -256,7 +263,7 @@ def _walk_block(
         )
         if text:
             _detail(f'"{text[:120]}"')
-        return default_next, False, ""
+        return default_next, False, "", f'"{text[:60]}"' if text else "", ""
 
     # ── Check attribute ───────────────────────────────────────────────────────
     if btype in ("CheckAttribute", "CheckContactAttributes", "Compare"):
@@ -270,9 +277,10 @@ def _walk_block(
             if evaluate(resolved, c.get("Operator", "Equals"), ops):
                 lbl = _cond_label(c)
                 _result(f"match → {lbl}")
-                return cond.get("NextAction", ""), False, ""
+                return (cond.get("NextAction", ""), False, "",
+                        f"'{cmp_expr}'='{resolved}' → {lbl}", lbl)
         _result("no match → default", ok=False)
-        return default_next, False, ""
+        return default_next, False, "", f"'{cmp_expr}'='{resolved}' → no match", "no match"
 
     # ── Check hours of operation ──────────────────────────────────────────────
     if btype == "CheckHoursOfOperation":
@@ -286,11 +294,11 @@ def _walk_block(
                 ops = [str(o).lower() for o in (c.get("Operands") or [])]
                 if any(o in ("true", "inhours") for o in ops):
                     _result("In Hours")
-                    return cond.get("NextAction", default_next), False, ""
+                    return cond.get("NextAction", default_next), False, "", "In Hours", "In Hours"
             _result("In Hours")
-            return default_next, False, ""
+            return default_next, False, "", "In Hours", "In Hours"
         _result("Out of Hours", ok=False)
-        return error_next or default_next, False, ""
+        return error_next or default_next, False, "", "Out of Hours", "Out of Hours"
 
     # ── Check staffing ────────────────────────────────────────────────────────
     if btype in ("CheckStaffing", "CheckStaffingStatus"):
@@ -304,11 +312,11 @@ def _walk_block(
                 ops = [str(o).lower() for o in (c.get("Operands") or [])]
                 if any(o in ("true", "staffed") for o in ops):
                     _result("Staffed")
-                    return cond.get("NextAction", default_next), False, ""
+                    return cond.get("NextAction", default_next), False, "", "Staffed", "Staffed"
             _result("Staffed")
-            return default_next, False, ""
+            return default_next, False, "", "Staffed", "Staffed"
         _result("Not Staffed", ok=False)
-        return error_next or default_next, False, ""
+        return error_next or default_next, False, "", "Not Staffed", "Not Staffed"
 
     # ── Lambda ────────────────────────────────────────────────────────────────
     if btype in LAMBDA_TYPES:
@@ -340,13 +348,11 @@ def _walk_block(
         if result == "Success":
             template = session.lambda_output_templates.get(fn_name) or []
             if template:
-                # Prompt for each pre-declared attribute
                 for attr_name in template:
                     attr_val = _ask(f"  $.External.{attr_name}")
                     mock["attributes"][attr_name] = attr_val
                     state.external[attr_name] = attr_val
                     _detail(f"  $.External.{attr_name} = '{attr_val}'", _GR)
-                # Allow adding extras not in the template
                 extra = _ask("  Additional attribute name (blank to skip)")
                 while extra.strip():
                     attr_val = _ask(f"  $.External.{extra.strip()}")
@@ -355,7 +361,6 @@ def _walk_block(
                     _detail(f"  $.External.{extra.strip()} = '{attr_val}'", _GR)
                     extra = _ask("  Additional attribute name (blank to skip)")
             else:
-                # No template — fall back to open-ended entry
                 _detail("(blank name to finish)")
                 while True:
                     attr_name = _ask("  Attribute name").strip()
@@ -366,10 +371,10 @@ def _walk_block(
                     state.external[attr_name] = attr_val
                     _detail(f"  $.External.{attr_name} = '{attr_val}'", _GR)
             _result("Lambda → Success")
-            return default_next, False, ""
+            return default_next, False, "", f"Lambda '{fn_name}' → Success", "Success"
         else:
             _result("Lambda → Error", ok=False)
-            return error_next or default_next, False, ""
+            return error_next or default_next, False, "", f"Lambda '{fn_name}' → Error", "Error"
 
     # ── DTMF / voice input ────────────────────────────────────────────────────
     if btype == "GetUserInput":
@@ -389,12 +394,13 @@ def _walk_block(
             ops = [str(o) for o in (c.get("Operands") or [])]
             if val in ops:
                 _result(f"Input: {val}")
-                return cond.get("NextAction", ""), False, ""
+                return (cond.get("NextAction", ""), False, "",
+                        f"Input: {val}", f"Input: {val}")
         _result(f"Input: {val} (no match → default)", ok=False)
-        return default_next, False, ""
+        return default_next, False, "", f"Input: {val} → no match", f"Input: {val} (no match)"
 
     # ── All other blocks ──────────────────────────────────────────────────────
-    return default_next, False, ""
+    return default_next, False, "", "", ""
 
 
 # ── Walking loop ──────────────────────────────────────────────────────────────
@@ -412,7 +418,9 @@ def _walk_flow(
         return
 
     content    = env.get("content") or {}
-    flow_name  = (env.get("metadata") or {}).get("name", "?")
+    meta       = env.get("metadata") or {}
+    flow_name  = meta.get("name", "?")
+    flow_id    = meta.get("id", "")
     block_idx  = {a["Identifier"]: a for a in (content.get("Actions") or [])}
     current_id = content.get("StartAction", "")
     visited: set[str] = set()
@@ -431,9 +439,25 @@ def _walk_flow(
             break
 
         session.step_count += 1
-        next_id, is_terminal, transfer_target = _walk_block(
+        btype = action.get("Type", "")
+        next_id, is_terminal, transfer_target, action_desc, branch = _walk_block(
             action, flow_name, content, state, session, session.step_count
         )
+
+        session.path.append(Step(
+            flow_id       = flow_id,
+            flow_name     = flow_name,
+            block_id      = current_id,
+            block_label   = _block_label(action),
+            block_type    = btype,
+            type_label    = TYPE_LABELS.get(btype, btype),
+            action_desc   = action_desc,
+            branch        = branch,
+            next_block_id = next_id,
+            terminal      = is_terminal,
+            is_transfer   = bool(transfer_target),
+            transfer_target = transfer_target,
+        ))
 
         if is_terminal:
             break
@@ -548,6 +572,19 @@ def walk(
         print(f"  {_B}Lambda outputs:{_R}")
         for k, v in sorted(state.external.items()):
             print(f"    {k} = '{v}'")
+
+    # ── HTML visualization ────────────────────────────────────────────────────
+    if session.path:
+        SIMULATIONS_DIR.mkdir(parents=True, exist_ok=True)
+        safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", actual_name)
+        html_path = SIMULATIONS_DIR / f"walk_{safe_name}.html"
+        scenario_for_html = {
+            "call_parameters": state.contact_params,
+            "attributes":      state.attributes,
+        }
+        html = _fs.build_html(session.path, state, scenario_for_html, by_id, by_name)
+        html_path.write_text(html, encoding="utf-8")
+        print(f"  {_GR}HTML saved → {html_path}{_R}")
 
     print()
     if _ask_bool("Save session as scenario?", default=True):
