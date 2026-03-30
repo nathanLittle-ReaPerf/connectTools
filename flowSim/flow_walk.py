@@ -71,11 +71,13 @@ _KIND_COLOR: dict[str, str] = {
 # ── Walk session (accumulates choices for scenario export) ────────────────────
 @dataclass
 class WalkSession:
-    dtmf_inputs:    dict = field(default_factory=dict)
-    lambda_mocks:   dict = field(default_factory=dict)
-    hours_mocks:    dict = field(default_factory=dict)
-    staffing_mocks: dict = field(default_factory=dict)
-    step_count:     int  = 0
+    dtmf_inputs:            dict = field(default_factory=dict)
+    lambda_mocks:           dict = field(default_factory=dict)
+    hours_mocks:            dict = field(default_factory=dict)
+    staffing_mocks:         dict = field(default_factory=dict)
+    # fn_name → list of $.External attr names expected from that Lambda
+    lambda_output_templates: dict = field(default_factory=dict)
+    step_count:             int  = 0
 
 
 # ── Prompt helpers ────────────────────────────────────────────────────────────
@@ -162,11 +164,33 @@ def _lambda_input_params(params: dict, state: SimState) -> dict[str, str]:
     return result
 
 
+# ── Lambda output attribute detection ────────────────────────────────────────
+
+_EXT_RE = re.compile(r'\$\.External\.([a-zA-Z0-9_]+)')
+
+
+def _detect_lambda_outputs(content: dict) -> list[str]:
+    """Scan all block Parameters in this flow for $.External.* references.
+
+    Returns a deduplicated, sorted list of attribute names — these are the
+    external attributes that downstream blocks are expected to read after a
+    Lambda invocation.
+    """
+    found: set[str] = set()
+    for action in (content.get("Actions") or []):
+        params = action.get("Parameters") or {}
+        # Stringify the whole params dict and scan for $.External.* patterns
+        for m in _EXT_RE.finditer(json.dumps(params)):
+            found.add(m.group(1))
+    return sorted(found)
+
+
 # ── Block walker ──────────────────────────────────────────────────────────────
 
 def _walk_block(
     action: dict,
     flow_name: str,
+    flow_content: dict,
     state: SimState,
     session: WalkSession,
     num: int,
@@ -175,6 +199,8 @@ def _walk_block(
     Interactively process one block.
     Returns (next_block_id, is_terminal, transfer_target).
     transfer_target is non-empty for TransferContactToFlow blocks.
+    flow_content is the full content dict for the current flow (used to
+    detect expected Lambda output attributes).
     """
     btype  = action.get("Type", "")
     blabel = _block_label(action)
@@ -211,8 +237,9 @@ def _walk_block(
     if btype in SET_ATTR_TYPES:
         for key, val in (params.get("Attributes") or {}).items():
             resolved = resolve(val, state)
-            state.attributes[key] = resolved
-            _detail(f"SET {key} = '{resolved}'", _GR)
+            chosen = _ask(f"  {key}", default=resolved)
+            state.attributes[key] = chosen
+            _detail(f"SET {key} = '{chosen}'", _GR)
         return default_next, False, ""
 
     # ── Set queue ─────────────────────────────────────────────────────────────
@@ -296,12 +323,39 @@ def _walk_block(
             for k, v in lp.items():
                 _detail(f"  {k} = '{v}'")
 
+        # ── On first encounter: establish expected output attribute names ──
+        if fn_name not in session.lambda_output_templates:
+            detected = _detect_lambda_outputs(flow_content)
+            if detected:
+                _detail(f"Detected $.External attrs referenced in flow: {', '.join(detected)}")
+            suggested = ", ".join(detected)
+            raw = _ask("Return attributes (comma-separated, blank for none)", default=suggested)
+            template = [a.strip() for a in raw.split(",") if a.strip()] if raw.strip() else []
+            session.lambda_output_templates[fn_name] = template
+
         result = _ask_choice("Result", ["Success", "Error"], default="Success")
         mock: dict = {"result": result, "attributes": {}}
         session.lambda_mocks[fn_name] = mock
 
         if result == "Success":
-            if _ask_bool("Set output attributes?", default=False):
+            template = session.lambda_output_templates.get(fn_name) or []
+            if template:
+                # Prompt for each pre-declared attribute
+                for attr_name in template:
+                    attr_val = _ask(f"  $.External.{attr_name}")
+                    mock["attributes"][attr_name] = attr_val
+                    state.external[attr_name] = attr_val
+                    _detail(f"  $.External.{attr_name} = '{attr_val}'", _GR)
+                # Allow adding extras not in the template
+                extra = _ask("  Additional attribute name (blank to skip)")
+                while extra.strip():
+                    attr_val = _ask(f"  $.External.{extra.strip()}")
+                    mock["attributes"][extra.strip()] = attr_val
+                    state.external[extra.strip()] = attr_val
+                    _detail(f"  $.External.{extra.strip()} = '{attr_val}'", _GR)
+                    extra = _ask("  Additional attribute name (blank to skip)")
+            else:
+                # No template — fall back to open-ended entry
                 _detail("(blank name to finish)")
                 while True:
                     attr_name = _ask("  Attribute name").strip()
@@ -378,7 +432,7 @@ def _walk_flow(
 
         session.step_count += 1
         next_id, is_terminal, transfer_target = _walk_block(
-            action, flow_name, state, session, session.step_count
+            action, flow_name, content, state, session, session.step_count
         )
 
         if is_terminal:
