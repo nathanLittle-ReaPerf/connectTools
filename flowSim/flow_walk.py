@@ -279,6 +279,12 @@ def _walk_block(
                 _result(f"match → {lbl}")
                 return (cond.get("NextAction", ""), False, "",
                         f"'{cmp_expr}'='{resolved}' → {lbl}", lbl)
+        # Show every condition that was tested so the user can see what's in the flow
+        for cond in conditions:
+            c   = cond.get("Condition") or {}
+            op  = c.get("Operator", "?")
+            ops = [str(o) for o in (c.get("Operands") or [])]
+            _detail(f"  tested: {op} {ops}  → no match")
         _result("no match → default", ok=False)
         return default_next, False, "", f"'{cmp_expr}'='{resolved}' → no match", "no match"
 
@@ -377,7 +383,7 @@ def _walk_block(
             return error_next or default_next, False, "", f"Lambda '{fn_name}' → Error", "Error"
 
     # ── DTMF / voice input ────────────────────────────────────────────────────
-    if btype == "GetUserInput":
+    if btype in ("GetUserInput", "GetParticipantInput"):
         text = resolve(params.get("Text") or "", state)
         if text:
             _detail(f'"{text[:120]}"')
