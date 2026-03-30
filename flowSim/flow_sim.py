@@ -106,6 +106,7 @@ TYPE_LABELS: dict[str, str] = {
     "SetRecordingBehavior":      "Set Recording",
     "SetVoice":                  "Set Voice",
     "TransferContactToFlow":     "Transfer to Flow",
+    "TransferToFlow":            "Transfer to Flow",
     "EndFlowExecution":          "End Flow",
     "SetContactFlow":            "Set Flow",
     "HoldParticipantConnection": "Hold",
@@ -127,7 +128,7 @@ TERMINAL_TYPES = {
 
 LAMBDA_TYPES    = {"InvokeLambdaFunction", "InvokeExternalResource"}
 SET_ATTR_TYPES  = {"UpdateContactAttributes", "SetAttributes"}
-TRANSFER_TYPES  = {"TransferContactToFlow", "InvokeFlowModule"}
+TRANSFER_TYPES  = {"TransferContactToFlow", "TransferToFlow", "InvokeFlowModule"}
 
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
