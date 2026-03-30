@@ -513,7 +513,7 @@ def action_map():
 
     region = ""
     if force_refresh or instance_id not in instances_with_cache:
-        region = ask_required("AWS region (e.g. us-east-1)")
+        region = ask("AWS region", default="us-east-1")
 
     profile = ask("AWS profile (leave blank for default)", default="")
     no_html = ask_yn("Generate HTML report?", default=True)
