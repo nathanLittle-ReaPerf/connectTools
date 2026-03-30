@@ -255,12 +255,19 @@ def evaluate(value: str, operator: str, operands: list[str]) -> bool:
         return any(v.startswith(op) for op in operands)
     if operator == "EndsWith":
         return any(v.endswith(op) for op in operands)
-    if operator in ("GreaterThan", "GreaterThanOrEqualTo", "LessThan", "LessThanOrEqualTo"):
+    _NUM_OPS = {
+        "GreaterThan":               lambda a, b: a > b,
+        "GreaterThanOrEqualTo":      lambda a, b: a >= b,
+        "LessThan":                  lambda a, b: a < b,
+        "LessThanOrEqualTo":         lambda a, b: a <= b,
+        "NumberGreaterThan":         lambda a, b: a > b,
+        "NumberGreaterThanOrEqualTo":lambda a, b: a >= b,
+        "NumberLessThan":            lambda a, b: a < b,
+        "NumberLessThanOrEqualTo":   lambda a, b: a <= b,
+    }
+    if operator in _NUM_OPS:
         try:
-            fv = float(v)
-            fo = float(operands[0])
-            return {"GreaterThan": fv > fo, "GreaterThanOrEqualTo": fv >= fo,
-                    "LessThan": fv < fo, "LessThanOrEqualTo": fv <= fo}[operator]
+            return _NUM_OPS[operator](float(v), float(operands[0]))
         except (ValueError, IndexError):
             return False
     return False
