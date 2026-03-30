@@ -152,15 +152,15 @@ def _read_key() -> str:
         return "ESC"
 
 
-def pick_menu(title: str, options: list[tuple[str, str]]) -> str | None:
+def pick_menu(title: str, options: list[tuple[str, str]], initial: int = 0) -> str | None:
     """Arrow-key menu with numbered fallback when raw input is unavailable."""
     if not options:
         return None
     if not _supports_raw():
-        return _pick_menu_numbered(title, options)
+        return _pick_menu_numbered(title, options, initial=initial)
 
     n = len(options)
-    sel = 0
+    sel = max(0, min(initial, n - 1))
     first_draw = True
 
     def render() -> None:
@@ -204,17 +204,19 @@ def pick_menu(title: str, options: list[tuple[str, str]]) -> str | None:
             raise KeyboardInterrupt
 
 
-def _pick_menu_numbered(title: str, options: list[tuple[str, str]]) -> str | None:
+def _pick_menu_numbered(title: str, options: list[tuple[str, str]], initial: int = 0) -> str | None:
     """Numbered fallback when arrow-key input is unavailable."""
     print()
     print(bold(f"  {title}"))
     print()
     for i, (_, label) in enumerate(options, 1):
-        print(f"  {cyan(str(i))}.  {label}")
+        marker = green("▶") + " " if (i - 1) == initial else "  "
+        print(f"  {marker}{cyan(str(i))}.  {label}")
     print(f"  {dim('0')}.  {dim('Back / Exit')}")
+    default_num = initial + 1 if 0 <= initial < len(options) else None
     print()
     while True:
-        raw = ask("Select")
+        raw = ask("Select", default=str(default_num) if default_num else "")
         if raw == "0" or raw == "":
             return None
         try:
@@ -362,6 +364,32 @@ def cache_info(instance_id: str) -> str:
     except Exception:
         return dim("cache unreadable")
 
+# ── Per-instance config (default flows, etc.) ─────────────────────────────────
+
+_CONFIG_PATH = Path.home() / ".connecttools" / "flowsim_config.json"
+
+def _load_config() -> dict:
+    try:
+        return json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+def _save_config(cfg: dict) -> None:
+    try:
+        _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _CONFIG_PATH.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+def _load_default_flow(instance_id: str) -> str:
+    return _load_config().get("default_flows", {}).get(instance_id, "")
+
+def _save_default_flow(instance_id: str, flow_name: str) -> None:
+    cfg = _load_config()
+    cfg.setdefault("default_flows", {})[instance_id] = flow_name
+    _save_config(cfg)
+
+
 def pick_instance() -> str | None:
     instances = cached_instances()
     if not instances:
@@ -379,13 +407,16 @@ def pick_flow(instance_id: str) -> str | None:
     names = cached_flow_names(instance_id)
     if not names:
         return ask_required("Starting flow name")
+    default_flow = _load_default_flow(instance_id)
+    initial = next((i for i, n in enumerate(names) if n == default_flow), 0)
     options = [(name, name) for name in names]
     options.append(("_manual", "Type a flow name manually"))
-    choice = pick_menu("Select flow", options)
+    choice = pick_menu("Select flow", options, initial=initial)
     if choice is None:
         return None
     if choice == "_manual":
-        return ask_required("Flow name")
+        choice = ask_required("Flow name")
+    _save_default_flow(instance_id, choice)
     return choice
 
 def _scenario_label(p: Path) -> tuple[str, str]:
