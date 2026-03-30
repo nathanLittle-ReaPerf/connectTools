@@ -354,7 +354,6 @@ def _walk_block(
                 if cached_result == "Success":
                     for attr_name, attr_val in cached_attrs.items():
                         state.external[attr_name] = attr_val
-                        _detail(f"  $.External.{attr_name} = '{attr_val}'", _GR)
                 _result(f"Lambda → {cached_result}", ok=(cached_result == "Success"))
                 desc = f"Lambda '{fn_name}' → {cached_result} (cached)"
                 if cached_result == "Success":
