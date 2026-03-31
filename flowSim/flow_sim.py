@@ -951,6 +951,7 @@ function initCy(idx) {{
     layout: {{ name: 'dagre', rankDir: 'TB', nodeSep: 50, rankSep: 70, padding: 30, animate: false, fit: true }},
   }});
   cyInstances[idx] = {{ cy, flowId: fg.flow_id }};
+  wireNodeClick(cy);
 }}
 
 function showTab(idx) {{
@@ -971,28 +972,39 @@ function showTab(idx) {{
   }}, 50);
 }}
 
-// Step click → highlight node in graph
+function focusNode(cy, nodeId) {{
+  const n = cy.getElementById(nodeId);
+  if (!n.length) return;
+  cy.nodes().removeClass('highlighted');
+  n.addClass('highlighted');
+  cy.animate({{ fit: {{ eles: n, padding: 120 }}, duration: 300 }});
+  updateZoomInput(cy.zoom());
+}}
+
+// Step click → highlight + zoom to node in graph
 document.querySelectorAll('.step[data-bid]').forEach(el => {{
   el.addEventListener('click', () => {{
     const bid = el.dataset.bid;
     const fid = el.dataset.fid;
-    // Switch to correct tab
     const tabIdx = flowGraphs.findIndex(fg => fg.flow_id === fid);
     if (tabIdx >= 0) {{
       showTab(tabIdx);
       setTimeout(() => {{
         const inst = cyInstances[tabIdx];
-        if (inst) {{
-          inst.cy.nodes().removeClass('highlighted');
-          const n = inst.cy.getElementById(bid);
-          if (n.length) {{ n.addClass('highlighted'); inst.cy.center(n); }}
-        }}
+        if (inst) focusNode(inst.cy, bid);
       }}, 80);
     }}
     document.querySelectorAll('.step').forEach(s => s.classList.remove('active-step'));
     el.classList.add('active-step');
   }});
 }});
+
+// Node click in graph → zoom to that node
+function wireNodeClick(cy) {{
+  cy.on('tap', 'node', function(e) {{
+    focusNode(cy, e.target.id());
+  }});
+}}
 
 function activeIdx() {{
   const tabs = document.querySelectorAll('.tab-btn');
