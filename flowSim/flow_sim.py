@@ -1074,7 +1074,12 @@ examples:
 
     if not args.no_html:
         SIMULATIONS_DIR.mkdir(parents=True, exist_ok=True)
-        html_path = args.html or str(SIMULATIONS_DIR / ("sim_" + re.sub(r"[^a-zA-Z0-9_-]", "_", args.flow) + ".html"))
+        if args.html:
+            p_html = Path(args.html)
+            # Bare filename with no directory → put it in Simulations/
+            html_path = SIMULATIONS_DIR / p_html.name if not p_html.parent.name else p_html
+        else:
+            html_path = SIMULATIONS_DIR / ("sim_" + re.sub(r"[^a-zA-Z0-9_-]", "_", args.flow) + ".html")
         Path(html_path).write_text(build_html(path, state, scenario, by_id, by_name), encoding="utf-8")
         print(f"  HTML saved     → {html_path}")
 
