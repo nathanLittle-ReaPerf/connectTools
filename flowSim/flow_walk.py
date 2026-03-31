@@ -18,8 +18,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-FLOWSIM_DIR   = Path(__file__).parent
-SCENARIOS_DIR = FLOWSIM_DIR / "Scenarios"
+FLOWSIM_DIR    = Path(__file__).parent
+SCENARIOS_DIR  = FLOWSIM_DIR / "Scenarios"
+FOR_REVIEW_DIR = FLOWSIM_DIR / "for_review"
 
 # ── Import shared engine from flow_sim ────────────────────────────────────────
 sys.path.insert(0, str(FLOWSIM_DIR))
@@ -758,6 +759,16 @@ def walk(
         for f in session.flagged:
             print(f"    Step {f['step']:3d}  [{f['block_type']}]  {f['block_label']}  ({f['flow']})")
             print(f"           {_YL}{f['note']}{_R}")
+
+        # Append to running for_review file
+        FOR_REVIEW_DIR.mkdir(parents=True, exist_ok=True)
+        review_path = FOR_REVIEW_DIR / f"{instance_id}.json"
+        existing = json.loads(review_path.read_text()) if review_path.exists() else []
+        ts = datetime.now(timezone.utc).isoformat()
+        for f in session.flagged:
+            existing.append({**f, "instance_id": instance_id, "walk_flow": actual_name, "timestamp": ts})
+        review_path.write_text(json.dumps(existing, indent=2))
+        print(f"  {_D}Appended to {review_path}{_R}")
 
     # ── HTML visualization ────────────────────────────────────────────────────
     if session.path:
