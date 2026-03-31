@@ -328,6 +328,27 @@ def _walk_block(
         _result("Not Staffed", ok=False)
         return error_next or default_next, False, "", "Not Staffed", "Not Staffed"
 
+    # ── Check metric data ─────────────────────────────────────────────────────
+    if btype == "CheckMetricData":
+        metric = params.get("MetricType") or params.get("Metric") or "metric"
+        queue  = params.get("QueueId") or ""
+        label  = metric
+        if queue:
+            label += f" (queue: {queue.split('/')[-1]})"
+        _detail(f"Metric: {label}")
+        met = _ask_bool("Condition met?", default=True)
+        if met:
+            for cond in conditions:
+                c   = cond.get("Condition") or {}
+                ops = [str(o).lower() for o in (c.get("Operands") or [])]
+                if any(o in ("true", "met") for o in ops):
+                    _result("Condition Met")
+                    return cond.get("NextAction", default_next), False, "", f"{metric} → met", "Met"
+            _result("Condition Met")
+            return default_next, False, "", f"{metric} → met", "Met"
+        _result("Condition Not Met", ok=False)
+        return error_next or default_next, False, "", f"{metric} → not met", "Not Met"
+
     # ── Lambda ────────────────────────────────────────────────────────────────
     if btype in LAMBDA_TYPES:
         arn     = (params.get("LambdaFunctionARN") or params.get("FunctionArn") or
