@@ -82,6 +82,8 @@ class WalkSession:
     lambda_output_templates: dict      = field(default_factory=dict)
     path:                   list       = field(default_factory=list)  # list[Step]
     step_count:             int        = 0
+    # attrs locked before walk starts — Set Attribute blocks cannot overwrite these
+    pinned_attrs:           dict       = field(default_factory=dict)
 
 
 # ── Prompt helpers ────────────────────────────────────────────────────────────
@@ -245,6 +247,11 @@ def _walk_block(
     if btype in SET_ATTR_TYPES:
         parts = []
         for key, val in (params.get("Attributes") or {}).items():
+            if key in session.pinned_attrs:
+                pinned_val = session.pinned_attrs[key]
+                _detail(f"  {key} [pinned] = '{pinned_val}'", _D)
+                parts.append(f"{key}='{pinned_val}' (pinned)")
+                continue
             resolved = resolve(val, state)
             chosen = _ask(f"  {key}", default=resolved)
             state.attributes[key] = chosen
@@ -572,6 +579,66 @@ def _save_scenario(state: SimState, session: WalkSession,
           f"--flow \"{flow_name}\" --scenario \"{out_path}\"{_R}")
 
 
+# ── Baseline attribute helpers ─────────────────────────────────────────────────
+
+_ATTR_NAME_RE = re.compile(r'\$\.Attributes\.([a-zA-Z0-9_]+)')
+
+
+def _discover_attrs(content: dict) -> list[str]:
+    """Return sorted list of all $.Attributes.* names referenced in a flow."""
+    found: set[str] = set()
+    for action in (content.get("Actions") or []):
+        # Keys set by UpdateContactAttributes blocks
+        if action.get("Type") in SET_ATTR_TYPES:
+            for key in ((action.get("Parameters") or {}).get("Attributes") or {}):
+                found.add(key)
+        # Any $.Attributes.* reference anywhere in Parameters
+        params_str = json.dumps(action.get("Parameters") or {})
+        for m in _ATTR_NAME_RE.finditer(params_str):
+            found.add(m.group(1))
+    return sorted(found)
+
+
+def _prompt_baseline_attrs(
+    flow_content: dict,
+    state: SimState,
+    session: WalkSession,
+) -> None:
+    """Ask user if they want to pin any attributes before the walk starts."""
+    if not _ask_bool("Set any attributes before starting?", default=False):
+        return
+
+    known = _discover_attrs(flow_content)
+    if known:
+        print(f"  {_D}Discovered {len(known)} attribute(s) — enter value to pin, blank to skip:{_R}")
+    else:
+        print(f"  {_D}No attributes discovered in this flow — enter manually:{_R}")
+        known = []
+
+    pinned: dict = {}
+    for attr in known:
+        val = _ask(f"  {attr}", default="")
+        if val != "":
+            pinned[attr] = val
+
+    # Allow freeform additions beyond the discovered list
+    while True:
+        extra = _ask("  Additional attribute (blank to finish)", default="")
+        if not extra.strip():
+            break
+        val = _ask(f"  {extra.strip()}", default="")
+        pinned[extra.strip()] = val
+
+    if pinned:
+        for k, v in pinned.items():
+            state.attributes[k] = v
+        session.pinned_attrs = pinned
+        print(f"  {_GR}Pinned {len(pinned)} attribute(s):{_R} "
+              + ", ".join(f"{k}='{v}'" for k, v in pinned.items()))
+    else:
+        print(f"  {_D}No attributes pinned.{_R}")
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def walk(
@@ -612,6 +679,9 @@ def walk(
         dnis = _ask("Dialed number (DNIS)", default="")
         if dnis:
             state.contact_params["dnis"] = dnis
+
+    start_content = start.get("content") or {}
+    _prompt_baseline_attrs(start_content, state, session)
 
     print(f"\n  {_B}Walking: {actual_name}{_R}")
     print(f"  {_D}ANI:  {state.contact_params.get('ani') or '?'}  "
