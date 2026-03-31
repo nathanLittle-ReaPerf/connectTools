@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import re
@@ -170,6 +171,18 @@ def _extract_messages(path: str) -> list[str]:
     raw = open(path, encoding="utf-8", errors="replace").read().strip()
     if not raw:
         return []
+
+    # Try CSV first (CloudWatch console export has a "message" column)
+    if path.lower().endswith(".csv") or (raw.startswith('"') and "message" in raw.splitlines()[0].lower()):
+        try:
+            reader = csv.DictReader(raw.splitlines())
+            # Find the message column case-insensitively
+            fieldnames = reader.fieldnames or []
+            msg_col = next((f for f in fieldnames if f.lower() == "message"), None)
+            if msg_col:
+                return [row[msg_col] for row in reader if row.get(msg_col, "").strip()]
+        except Exception:
+            pass  # fall through to JSON parsing
 
     # Try to parse as JSON
     try:
