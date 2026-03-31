@@ -84,6 +84,8 @@ class WalkSession:
     step_count:             int        = 0
     # attrs locked before walk starts — Set Attribute blocks cannot overwrite these
     pinned_attrs:           dict       = field(default_factory=dict)
+    # blocks flagged for review during walk: list of dicts
+    flagged:                list       = field(default_factory=list)
 
 
 # ── Prompt helpers ────────────────────────────────────────────────────────────
@@ -527,11 +529,12 @@ def _walk_flow(
             action, flow_name, content, state, session, session.step_count
         )
 
+        blabel = _block_label(action)
         session.path.append(Step(
             flow_id       = flow_id,
             flow_name     = flow_name,
             block_id      = current_id,
-            block_label   = _block_label(action),
+            block_label   = blabel,
             block_type    = btype,
             type_label    = TYPE_LABELS.get(btype, btype),
             action_desc   = action_desc,
@@ -541,6 +544,19 @@ def _walk_flow(
             is_transfer   = bool(transfer_target),
             transfer_target = transfer_target,
         ))
+
+        # Offer flag-for-review at meaningful block types
+        if btype in (DECISION_TYPES | LAMBDA_TYPES | SET_ATTR_TYPES):
+            note = _ask(f"  {_D}Flag for review? (note or Enter to skip){_R}", default="")
+            if note:
+                session.flagged.append({
+                    "step":        session.step_count,
+                    "flow":        flow_name,
+                    "block_id":    current_id,
+                    "block_label": blabel,
+                    "block_type":  btype,
+                    "note":        note,
+                })
 
         if is_terminal:
             break
@@ -737,6 +753,11 @@ def walk(
         print(f"  {_B}Lambda outputs:{_R}")
         for k, v in sorted(state.external.items()):
             print(f"    {k} = '{v}'")
+    if session.flagged:
+        print(f"\n  {_YL}{_B}Flagged for review ({len(session.flagged)}):{_R}")
+        for f in session.flagged:
+            print(f"    Step {f['step']:3d}  [{f['block_type']}]  {f['block_label']}  ({f['flow']})")
+            print(f"           {_YL}{f['note']}{_R}")
 
     # ── HTML visualization ────────────────────────────────────────────────────
     if session.path:
