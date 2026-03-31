@@ -499,8 +499,10 @@ def _walk_flow(
 
     while current_id and session.step_count < MAX_STEPS:
         if current_id in visited:
-            print(f"\n  {_RD}[LOOP DETECTED — stopping]{_R}")
-            break
+            print(f"\n  {_YL}[LOOP DETECTED]{_R}")
+            if not _ask_bool("Continue loop?", default=True):
+                break
+            visited.clear()
         visited.add(current_id)
 
         action = block_idx.get(current_id)
