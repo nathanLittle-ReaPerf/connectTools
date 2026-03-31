@@ -839,9 +839,14 @@ body {{ font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9;
 .layout {{ display: flex; flex: 1; overflow: hidden; }}
 .trace-panel {{ width: 360px; flex-shrink: 0; overflow-y: auto; background: #0d1117; border-right: 1px solid #30363d; padding: 10px 0; }}
 .graph-panel {{ flex: 1; display: flex; flex-direction: column; overflow: hidden; }}
-.tab-bar {{ display: flex; gap: 2px; padding: 6px 10px; background: #161b22; border-bottom: 1px solid #30363d; flex-shrink: 0; }}
+.tab-bar {{ display: flex; gap: 2px; padding: 6px 10px; background: #161b22; border-bottom: 1px solid #30363d; flex-shrink: 0; align-items: center; }}
 .tab-btn {{ padding: 4px 12px; border: 1px solid #30363d; border-radius: 4px; background: #21262d; color: #8b949e; cursor: pointer; font-size: 0.85em; }}
 .tab-btn.active {{ background: #1f6feb; border-color: #1f6feb; color: white; }}
+.zoom-controls {{ margin-left: auto; display: flex; align-items: center; gap: 4px; }}
+.zoom-controls button {{ padding: 2px 8px; border: 1px solid #30363d; border-radius: 4px; background: #21262d; color: #8b949e; cursor: pointer; font-size: 0.9em; }}
+.zoom-controls button:hover {{ background: #30363d; color: #c9d1d9; }}
+.zoom-controls input {{ width: 52px; padding: 2px 4px; border: 1px solid #30363d; border-radius: 4px; background: #0d1117; color: #c9d1d9; font-size: 0.85em; text-align: right; }}
+.zoom-controls label {{ color: #8b949e; font-size: 0.85em; }}
 .cy-container {{ flex: 1; display: none; }}
 .cy-container.active {{ display: block; }}
 .flow-divider {{ font-size: 0.72em; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.08em; padding: 8px 14px 4px; border-top: 1px solid #21262d; margin-top: 4px; }}
@@ -880,7 +885,16 @@ body {{ font-family: system-ui, sans-serif; background: #0d1117; color: #c9d1d9;
     {"".join(step_rows)}
   </div>
   <div class="graph-panel">
-    <div class="tab-bar">{tab_buttons}</div>
+    <div class="tab-bar">{tab_buttons}
+      <span class="zoom-controls">
+        <button onclick="fitActive()" title="Fit to screen">⊡</button>
+        <button onclick="zoomActive(-0.2)">−</button>
+        <input id="zoom-input" type="number" min="10" max="500" step="10" value="100"
+               title="Zoom %" onchange="setZoomActive(this.value)">
+        <label>%</label>
+        <button onclick="zoomActive(0.2)">+</button>
+      </span>
+    </div>
     {cy_containers}
   </div>
 </div>
@@ -932,7 +946,7 @@ function initCy(idx) {{
   const fg  = flowGraphs[idx];
   const ctr = document.getElementById('cy' + idx);
   const cy  = cytoscape({{
-    container: ctr, elements: fg.elements, wheelSensitivity: 0.3,
+    container: ctr, elements: fg.elements, wheelSensitivity: 0.8,
     style: STYLES,
     layout: {{ name: 'dagre', rankDir: 'TB', nodeSep: 50, rankSep: 70, padding: 30, animate: false, fit: true }},
   }});
@@ -947,7 +961,14 @@ function showTab(idx) {{
     el.classList.toggle('active', i === idx);
   }});
   initCy(idx);
-  setTimeout(() => {{ if (cyInstances[idx]) cyInstances[idx].cy.fit(undefined, 30); }}, 50);
+  setTimeout(() => {{
+    const inst = cyInstances[idx];
+    if (inst) {{
+      inst.cy.fit(undefined, 30);
+      inst.cy.on('zoom', () => updateZoomInput(inst.cy.zoom()));
+      updateZoomInput(inst.cy.zoom());
+    }}
+  }}, 50);
 }}
 
 // Step click → highlight node in graph
@@ -973,8 +994,44 @@ document.querySelectorAll('.step[data-bid]').forEach(el => {{
   }});
 }});
 
-// Init first tab
-if (flowGraphs.length > 0) initCy(0);
+function activeIdx() {{
+  const tabs = document.querySelectorAll('.tab-btn');
+  for (let i = 0; i < tabs.length; i++) {{ if (tabs[i].classList.contains('active')) return i; }}
+  return 0;
+}}
+function fitActive() {{
+  const inst = cyInstances[activeIdx()];
+  if (inst) {{ inst.cy.fit(undefined, 30); updateZoomInput(inst.cy.zoom()); }}
+}}
+function zoomActive(delta) {{
+  const inst = cyInstances[activeIdx()];
+  if (inst) {{
+    const z = Math.max(0.1, Math.min(5, inst.cy.zoom() + delta));
+    inst.cy.zoom({{ level: z, renderedPosition: {{ x: inst.cy.width()/2, y: inst.cy.height()/2 }} }});
+    updateZoomInput(z);
+  }}
+}}
+function setZoomActive(val) {{
+  const inst = cyInstances[activeIdx()];
+  const z = Math.max(0.1, Math.min(5, parseFloat(val) / 100));
+  if (inst && !isNaN(z)) {{
+    inst.cy.zoom({{ level: z, renderedPosition: {{ x: inst.cy.width()/2, y: inst.cy.height()/2 }} }});
+  }}
+}}
+function updateZoomInput(z) {{
+  const el = document.getElementById('zoom-input');
+  if (el) el.value = Math.round(z * 100);
+}}
+
+// Init first tab and wire zoom sync
+if (flowGraphs.length > 0) {{
+  initCy(0);
+  const first = cyInstances[0];
+  if (first) {{
+    first.cy.on('zoom', () => updateZoomInput(first.cy.zoom()));
+    updateZoomInput(first.cy.zoom());
+  }}
+}}
 </script>
 </body>
 </html>"""
