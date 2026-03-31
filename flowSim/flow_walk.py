@@ -629,6 +629,25 @@ def _prompt_baseline_attrs(
         val = _ask(f"  {extra.strip()}", default="")
         pinned[extra.strip()] = val
 
+    # Review / edit loop — lets the user go back and fix anything they left blank
+    all_known = list(known) + [k for k in pinned if k not in known]
+    while True:
+        if pinned:
+            print(f"  {_D}Pinned: " + ", ".join(f"{k}='{v}'" for k, v in pinned.items()) + _R)
+        else:
+            print(f"  {_D}Nothing pinned yet.{_R}")
+        edit = _ask("  Edit attribute by name (blank to confirm)", default="")
+        if not edit.strip():
+            break
+        name = edit.strip()
+        current = pinned.get(name, "")
+        val = _ask(f"  {name}", default=current)
+        if val != "":
+            pinned[name] = val
+        elif name in pinned:
+            del pinned[name]
+            print(f"  {_D}{name} unpinned.{_R}")
+
     if pinned:
         for k, v in pinned.items():
             state.attributes[k] = v
