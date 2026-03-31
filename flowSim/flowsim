@@ -655,8 +655,10 @@ def action_export_logs():
     if not instance_id:
         return
 
-    region = ask_required("AWS region (e.g. us-east-1)")
+    region = ask("AWS region", default="us-east-1")
     profile = ask("AWS profile (leave blank for default)", default="")
+
+    cid = ask("Contact ID to filter (leave blank for bulk export)", default="")
 
     print()
     time_choice = pick_menu("Time range", [
@@ -700,6 +702,8 @@ def action_export_logs():
     ]
     if profile:
         cmd += ["--profile", profile]
+    if cid:
+        cmd += ["--contact-id", cid]
     cmd += time_args
     cmd += ["--max", str(max_contacts), "--out-dir", out_dir]
 

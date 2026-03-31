@@ -190,12 +190,16 @@ def fetch_events(
     start: datetime,
     end: datetime,
     max_contacts: int,
+    contact_id: str | None = None,
 ) -> tuple[list[dict], set[str]]:
     """
     Page through filter_log_events and collect events.
 
     Stops paginating once max_contacts unique ContactIds have been seen
     (or the window is exhausted if max_contacts == 0).
+
+    If contact_id is given, scopes the CloudWatch query to that CID only
+    and ignores max_contacts.
 
     Returns (events, seen_contact_ids).
     Events that belong to contacts beyond the limit are excluded.
@@ -207,6 +211,8 @@ def fetch_events(
         "endTime": _epoch_ms(end),
         "limit": 10000,
     }
+    if contact_id:
+        kwargs["filterPattern"] = f'{{ $.ContactId = "{contact_id}" }}'
 
     events: list[dict] = []
     seen: set[str] = set()
@@ -302,8 +308,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--instance-id", required=True, metavar="UUID",
                    help="Connect instance UUID")
-    p.add_argument("--region",  default=None, metavar="REGION")
-    p.add_argument("--profile", default=None, metavar="PROFILE")
+    p.add_argument("--region",     default=None, metavar="REGION")
+    p.add_argument("--profile",    default=None, metavar="PROFILE")
+    p.add_argument("--contact-id", default=None, metavar="CID",
+                   help="Filter to a single contact ID")
 
     grp = p.add_mutually_exclusive_group()
     grp.add_argument("--yesterday",  action="store_true",
@@ -346,8 +354,11 @@ def main() -> None:
 
     print()
     print(f"  Instance : {args.instance_id}")
+    if args.contact_id:
+        print(f"  Contact  : {args.contact_id}")
     print(f"  Window   : {start.strftime('%Y-%m-%d %H:%M')} → {end.strftime('%Y-%m-%d %H:%M')} UTC")
-    print(f"  Max      : {args.max if args.max > 0 else 'unlimited'} contacts")
+    if not args.contact_id:
+        print(f"  Max      : {args.max if args.max > 0 else 'unlimited'} contacts")
     print()
 
     session = _session(args.profile, args.region)
@@ -362,7 +373,8 @@ def main() -> None:
 
     print("  Fetching events ...")
     try:
-        events, seen = fetch_events(session, log_group, start, end, args.max)
+        events, seen = fetch_events(session, log_group, start, end, args.max,
+                                    contact_id=args.contact_id or None)
     except ClientError as exc:
         print(f"\n  Error: {exc}", file=sys.stderr)
         sys.exit(1)
