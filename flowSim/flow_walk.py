@@ -13,6 +13,7 @@ import argparse
 import json
 import re
 import sys
+import textwrap
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -264,7 +265,8 @@ def _walk_block(
             params.get("Text") or (params.get("Prompt") or {}).get("Text") or "", state
         )
         if text:
-            _detail(f'"{text[:120]}"')
+            for line in textwrap.wrap(text, width=100):
+                _detail(f'  {line}')
         return default_next, False, "", f'"{text[:60]}"' if text else "", ""
 
     # ── Check attribute ───────────────────────────────────────────────────────
@@ -419,7 +421,8 @@ def _walk_block(
     if btype in ("GetUserInput", "GetParticipantInput"):
         text = resolve(params.get("Text") or "", state)
         if text:
-            _detail(f'"{text[:120]}"')
+            for line in textwrap.wrap(text, width=100):
+                _detail(f'  {line}')
         valid = sorted({
             str(op)
             for c in conditions
