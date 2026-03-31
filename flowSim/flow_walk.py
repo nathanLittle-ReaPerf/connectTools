@@ -491,18 +491,29 @@ def _walk_flow(
     meta       = env.get("metadata") or {}
     flow_name  = meta.get("name", "?")
     flow_id    = meta.get("id", "")
-    block_idx  = {a["Identifier"]: a for a in (content.get("Actions") or [])}
-    current_id = content.get("StartAction", "")
+    block_idx      = {a["Identifier"]: a for a in (content.get("Actions") or [])}
+    current_id     = content.get("StartAction", "")
     visited: set[str] = set()
+    loop_remaining = 0  # automatic iterations left before asking again
 
     _divider(flow_name)
 
     while current_id and session.step_count < MAX_STEPS:
         if current_id in visited:
-            print(f"\n  {_YL}[LOOP DETECTED]{_R}")
-            if not _ask_bool("Continue loop?", default=True):
-                break
-            visited.clear()
+            if loop_remaining > 0:
+                loop_remaining -= 1
+                visited.clear()
+            else:
+                print(f"\n  {_YL}[LOOP DETECTED]{_R}")
+                raw = _ask("  Loop how many more times?", default="1")
+                try:
+                    n = int(raw)
+                except ValueError:
+                    n = 0
+                if n <= 0:
+                    break
+                loop_remaining = n - 1
+                visited.clear()
         visited.add(current_id)
 
         action = block_idx.get(current_id)
