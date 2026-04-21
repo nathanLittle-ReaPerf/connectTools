@@ -77,6 +77,7 @@ The menu is two levels: pick a **group**, then pick a **tool** within it. Press 
 |---|---|---|
 | 1 | Instance Snapshot | `instance_snapshot.py` |
 | 2 | Phone Numbers | `phone_numbers.py` |
+| 3 | Describe Resource | `describe_resource.py` |
 
 After selecting a tool, the menu prompts for each argument one at a time. Optional fields can be left blank to use defaults. When the tool finishes, press Enter to return to the tool submenu.
 
@@ -130,6 +131,8 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 **Instance Snapshot** — Instance ID, Region (refreshes or shows existing snapshot)
 
 **Phone Numbers** — Instance ID, Region, optional flow name filter, unassigned only (y/n), Output CSV
+
+**Describe Resource** — ARN or resource ID, optional resource type (required for bare IDs), Instance ID / Region / Profile (skipped when full ARN is provided)
 
 ## Logging
 
