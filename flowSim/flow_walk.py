@@ -13,12 +13,14 @@ import argparse
 import json
 import re
 import sys
+import textwrap
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-FLOWSIM_DIR   = Path(__file__).parent
-SCENARIOS_DIR = FLOWSIM_DIR / "Scenarios"
+FLOWSIM_DIR    = Path(__file__).parent
+SCENARIOS_DIR  = FLOWSIM_DIR / "Scenarios"
+FOR_REVIEW_DIR = FLOWSIM_DIR / "for_review"
 
 # ── Import shared engine from flow_sim ────────────────────────────────────────
 sys.path.insert(0, str(FLOWSIM_DIR))
@@ -81,6 +83,10 @@ class WalkSession:
     lambda_output_templates: dict      = field(default_factory=dict)
     path:                   list       = field(default_factory=list)  # list[Step]
     step_count:             int        = 0
+    # attrs locked before walk starts — Set Attribute blocks cannot overwrite these
+    pinned_attrs:           dict       = field(default_factory=dict)
+    # blocks flagged for review during walk: list of dicts
+    flagged:                list       = field(default_factory=list)
 
 
 # ── Prompt helpers ────────────────────────────────────────────────────────────
@@ -244,6 +250,11 @@ def _walk_block(
     if btype in SET_ATTR_TYPES:
         parts = []
         for key, val in (params.get("Attributes") or {}).items():
+            if key in session.pinned_attrs:
+                pinned_val = session.pinned_attrs[key]
+                _detail(f"  {key} [pinned] = '{pinned_val}'", _D)
+                parts.append(f"{key}='{pinned_val}' (pinned)")
+                continue
             resolved = resolve(val, state)
             chosen = _ask(f"  {key}", default=resolved)
             state.attributes[key] = chosen
@@ -264,7 +275,8 @@ def _walk_block(
             params.get("Text") or (params.get("Prompt") or {}).get("Text") or "", state
         )
         if text:
-            _detail(f'"{text[:120]}"')
+            for line in textwrap.wrap(text, width=100):
+                _detail(f'  {line}')
         return default_next, False, "", f'"{text[:60]}"' if text else "", ""
 
     # ── Check attribute ───────────────────────────────────────────────────────
@@ -325,6 +337,27 @@ def _walk_block(
             return default_next, False, "", "Staffed", "Staffed"
         _result("Not Staffed", ok=False)
         return error_next or default_next, False, "", "Not Staffed", "Not Staffed"
+
+    # ── Check metric data ─────────────────────────────────────────────────────
+    if btype == "CheckMetricData":
+        metric = params.get("MetricType") or params.get("Metric") or "metric"
+        queue  = params.get("QueueId") or ""
+        label  = metric
+        if queue:
+            label += f" (queue: {queue.split('/')[-1]})"
+        _detail(f"Metric: {label}")
+        met = _ask_bool("Condition met?", default=True)
+        if met:
+            for cond in conditions:
+                c   = cond.get("Condition") or {}
+                ops = [str(o).lower() for o in (c.get("Operands") or [])]
+                if any(o in ("true", "met") for o in ops):
+                    _result("Condition Met")
+                    return cond.get("NextAction", default_next), False, "", f"{metric} → met", "Met"
+            _result("Condition Met")
+            return default_next, False, "", f"{metric} → met", "Met"
+        _result("Condition Not Met", ok=False)
+        return error_next or default_next, False, "", f"{metric} → not met", "Not Met"
 
     # ── Lambda ────────────────────────────────────────────────────────────────
     if btype in LAMBDA_TYPES:
@@ -419,7 +452,8 @@ def _walk_block(
     if btype in ("GetUserInput", "GetParticipantInput"):
         text = resolve(params.get("Text") or "", state)
         if text:
-            _detail(f'"{text[:120]}"')
+            for line in textwrap.wrap(text, width=100):
+                _detail(f'  {line}')
         valid = sorted({
             str(op)
             for c in conditions
@@ -460,16 +494,29 @@ def _walk_flow(
     meta       = env.get("metadata") or {}
     flow_name  = meta.get("name", "?")
     flow_id    = meta.get("id", "")
-    block_idx  = {a["Identifier"]: a for a in (content.get("Actions") or [])}
-    current_id = content.get("StartAction", "")
+    block_idx      = {a["Identifier"]: a for a in (content.get("Actions") or [])}
+    current_id     = content.get("StartAction", "")
     visited: set[str] = set()
+    loop_remaining = 0  # automatic iterations left before asking again
 
     _divider(flow_name)
 
     while current_id and session.step_count < MAX_STEPS:
         if current_id in visited:
-            print(f"\n  {_RD}[LOOP DETECTED — stopping]{_R}")
-            break
+            if loop_remaining > 0:
+                loop_remaining -= 1
+                visited.clear()
+            else:
+                print(f"\n  {_YL}[LOOP DETECTED]{_R}")
+                raw = _ask("  Loop how many more times?", default="1")
+                try:
+                    n = int(raw)
+                except ValueError:
+                    n = 0
+                if n <= 0:
+                    break
+                loop_remaining = n - 1
+                visited.clear()
         visited.add(current_id)
 
         action = block_idx.get(current_id)
@@ -483,11 +530,12 @@ def _walk_flow(
             action, flow_name, content, state, session, session.step_count
         )
 
+        blabel = _block_label(action)
         session.path.append(Step(
             flow_id       = flow_id,
             flow_name     = flow_name,
             block_id      = current_id,
-            block_label   = _block_label(action),
+            block_label   = blabel,
             block_type    = btype,
             type_label    = TYPE_LABELS.get(btype, btype),
             action_desc   = action_desc,
@@ -497,6 +545,19 @@ def _walk_flow(
             is_transfer   = bool(transfer_target),
             transfer_target = transfer_target,
         ))
+
+        # Offer flag-for-review at meaningful block types
+        if btype in (DECISION_TYPES | LAMBDA_TYPES | SET_ATTR_TYPES):
+            note = _ask(f"  {_D}Flag for review? (note or Enter to skip){_R}", default="")
+            if note:
+                session.flagged.append({
+                    "step":        session.step_count,
+                    "flow":        flow_name,
+                    "block_id":    current_id,
+                    "block_label": blabel,
+                    "block_type":  btype,
+                    "note":        note,
+                })
 
         if is_terminal:
             break
@@ -548,6 +609,85 @@ def _save_scenario(state: SimState, session: WalkSession,
           f"--flow \"{flow_name}\" --scenario \"{out_path}\"{_R}")
 
 
+# ── Baseline attribute helpers ─────────────────────────────────────────────────
+
+_ATTR_NAME_RE = re.compile(r'\$\.Attributes\.([a-zA-Z0-9_]+)')
+
+
+def _discover_attrs(content: dict) -> list[str]:
+    """Return sorted list of all $.Attributes.* names referenced in a flow."""
+    found: set[str] = set()
+    for action in (content.get("Actions") or []):
+        # Keys set by UpdateContactAttributes blocks
+        if action.get("Type") in SET_ATTR_TYPES:
+            for key in ((action.get("Parameters") or {}).get("Attributes") or {}):
+                found.add(key)
+        # Any $.Attributes.* reference anywhere in Parameters
+        params_str = json.dumps(action.get("Parameters") or {})
+        for m in _ATTR_NAME_RE.finditer(params_str):
+            found.add(m.group(1))
+    return sorted(found)
+
+
+def _prompt_baseline_attrs(
+    flow_content: dict,
+    state: SimState,
+    session: WalkSession,
+) -> None:
+    """Ask user if they want to pin any attributes before the walk starts."""
+    if not _ask_bool("Set any attributes before starting?", default=False):
+        return
+
+    known = _discover_attrs(flow_content)
+    if known:
+        print(f"  {_D}Discovered {len(known)} attribute(s) — enter value to pin, blank to skip:{_R}")
+    else:
+        print(f"  {_D}No attributes discovered in this flow — enter manually:{_R}")
+        known = []
+
+    pinned: dict = {}
+    for attr in known:
+        val = _ask(f"  {attr}", default="")
+        if val != "":
+            pinned[attr] = val
+
+    # Allow freeform additions beyond the discovered list
+    while True:
+        extra = _ask("  Additional attribute (blank to finish)", default="")
+        if not extra.strip():
+            break
+        val = _ask(f"  {extra.strip()}", default="")
+        pinned[extra.strip()] = val
+
+    # Review / edit loop — lets the user go back and fix anything they left blank
+    all_known = list(known) + [k for k in pinned if k not in known]
+    while True:
+        if pinned:
+            print(f"  {_D}Pinned: " + ", ".join(f"{k}='{v}'" for k, v in pinned.items()) + _R)
+        else:
+            print(f"  {_D}Nothing pinned yet.{_R}")
+        edit = _ask("  Edit attribute by name (blank to confirm)", default="")
+        if not edit.strip():
+            break
+        name = edit.strip()
+        current = pinned.get(name, "")
+        val = _ask(f"  {name}", default=current)
+        if val != "":
+            pinned[name] = val
+        elif name in pinned:
+            del pinned[name]
+            print(f"  {_D}{name} unpinned.{_R}")
+
+    if pinned:
+        for k, v in pinned.items():
+            state.attributes[k] = v
+        session.pinned_attrs = pinned
+        print(f"  {_GR}Pinned {len(pinned)} attribute(s):{_R} "
+              + ", ".join(f"{k}='{v}'" for k, v in pinned.items()))
+    else:
+        print(f"  {_D}No attributes pinned.{_R}")
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def walk(
@@ -589,6 +729,9 @@ def walk(
         if dnis:
             state.contact_params["dnis"] = dnis
 
+    start_content = start.get("content") or {}
+    _prompt_baseline_attrs(start_content, state, session)
+
     print(f"\n  {_B}Walking: {actual_name}{_R}")
     print(f"  {_D}ANI:  {state.contact_params.get('ani') or '?'}  "
           f"DNIS: {state.contact_params.get('dnis') or '?'}{_R}")
@@ -611,6 +754,21 @@ def walk(
         print(f"  {_B}Lambda outputs:{_R}")
         for k, v in sorted(state.external.items()):
             print(f"    {k} = '{v}'")
+    if session.flagged:
+        print(f"\n  {_YL}{_B}Flagged for review ({len(session.flagged)}):{_R}")
+        for f in session.flagged:
+            print(f"    Step {f['step']:3d}  [{f['block_type']}]  {f['block_label']}  ({f['flow']})")
+            print(f"           {_YL}{f['note']}{_R}")
+
+        # Append to running for_review file
+        FOR_REVIEW_DIR.mkdir(parents=True, exist_ok=True)
+        review_path = FOR_REVIEW_DIR / f"{instance_id}.json"
+        existing = json.loads(review_path.read_text()) if review_path.exists() else []
+        ts = datetime.now(timezone.utc).isoformat()
+        for f in session.flagged:
+            existing.append({**f, "instance_id": instance_id, "walk_flow": actual_name, "timestamp": ts})
+        review_path.write_text(json.dumps(existing, indent=2))
+        print(f"  {_D}Appended to {review_path}{_R}")
 
     # ── HTML visualization ────────────────────────────────────────────────────
     if session.path:

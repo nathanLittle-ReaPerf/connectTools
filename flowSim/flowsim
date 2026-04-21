@@ -165,6 +165,34 @@ def pick_menu(title: str, options: list[tuple[str, str]], initial: int = 0) -> s
 
     def render() -> None:
         nonlocal first_draw
+        try:
+            cols = os.get_terminal_size().columns
+        except OSError:
+            cols = 120
+
+        def _clip(text: str) -> str:
+            """Truncate to terminal width, ignoring ANSI escape codes in the count."""
+            visible = re.sub(r'\x1b\[[0-9;]*m', '', text)
+            if len(visible) <= cols:
+                return text
+            # Trim the raw text so visible chars fit; keep ANSI prefix intact
+            keep = cols - 1
+            count = 0
+            out = []
+            i = 0
+            while i < len(text) and count < keep:
+                if text[i] == '\x1b':
+                    j = text.find('m', i)
+                    if j == -1:
+                        break
+                    out.append(text[i:j + 1])
+                    i = j + 1
+                else:
+                    out.append(text[i])
+                    count += 1
+                    i += 1
+            return ''.join(out) + '…'
+
         lines = [
             "",
             bold(f"  {title}"),
@@ -172,9 +200,9 @@ def pick_menu(title: str, options: list[tuple[str, str]], initial: int = 0) -> s
         ]
         for i, (_, label) in enumerate(options):
             if i == sel:
-                lines.append(f"  {green('▶')}  {bold(label)}")
+                lines.append(_clip(f"  {green('▶')}  {bold(label)}"))
             else:
-                lines.append(f"     {label}")
+                lines.append(_clip(f"     {label}"))
         lines.append(dim("  ↑ ↓  move    Enter  select    0 · Esc  back"))
 
         if not first_draw:
@@ -423,8 +451,8 @@ def _scenario_label(p: Path) -> tuple[str, str]:
     """Return (name, hint) for display. name is _name or filename stem, hint is contact count or note snippet."""
     d = load_json(str(p))
     if not d:
-        return p.stem, ""
-    name = d.get("_name") or p.stem
+        return p.stem[:60], ""
+    name = (d.get("_name") or p.stem)[:60]
     count = d.get("_contact_count")
     hint = f"{count} contact(s)" if count else d.get("_note", "")[:60]
     return name, hint
@@ -655,8 +683,10 @@ def action_export_logs():
     if not instance_id:
         return
 
-    region = ask_required("AWS region (e.g. us-east-1)")
+    region = ask("AWS region", default="us-east-1")
     profile = ask("AWS profile (leave blank for default)", default="")
+
+    cid = ask("Contact ID to filter (leave blank for bulk export)", default="")
 
     print()
     time_choice = pick_menu("Time range", [
@@ -700,6 +730,8 @@ def action_export_logs():
     ]
     if profile:
         cmd += ["--profile", profile]
+    if cid:
+        cmd += ["--contact-id", cid]
     cmd += time_args
     cmd += ["--max", str(max_contacts), "--out-dir", out_dir]
 

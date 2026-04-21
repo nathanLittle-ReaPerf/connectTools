@@ -1125,6 +1125,47 @@ def tool_phone_numbers():
     _run("phone_numbers.py", args)
 
 
+# ── Tool: Describe Resource ───────────────────────────────────────────────────
+
+_DESCRIBE_TYPES = [
+    "queue", "routing-profile", "contact-flow", "contact-flow-module",
+    "user", "hours-of-operation", "phone-number", "security-profile",
+    "quick-connect", "prompt", "agent-status",
+]
+
+def tool_describe_resource():
+    _header("Describe Resource")
+    arn = ask("ARN, partial ARN, or resource ID")
+
+    # If the input looks like a full ARN, instance and region are embedded —
+    # still offer them as optional overrides.
+    full_arn = arn.startswith("arn:aws:connect:")
+
+    # Resource type — only needed for bare IDs
+    rtype = ask(
+        "Resource type (leave blank if full ARN or type/id form)",
+        required=False,
+    )
+
+    args = [arn]
+    if rtype:
+        args += ["--type", rtype]
+
+    if full_arn:
+        # Region/profile only — instance is embedded
+        region  = ask("Region",  required=False, default=_cfg.get("region",  ""))
+        profile = ask("Profile", required=False, default=_cfg.get("profile", ""))
+        if region:  args += ["--region",  region]
+        if profile: args += ["--profile", profile]
+    else:
+        iid, region, profile = ask_connect_defaults()
+        if iid:     args += ["--instance-id", iid]
+        if region:  args += ["--region",      region]
+        if profile: args += ["--profile",     profile]
+
+    _run("describe_resource.py", args)
+
+
 # ── Tool: Settings ────────────────────────────────────────────────────────────
 
 def tool_settings():
@@ -1205,8 +1246,9 @@ GROUPS = [
         ("Security Profile Diff",  tool_security_profile_diff,  "Diff permissions between two security profiles"),
     ]),
     ("Instance", [
-        ("Instance Snapshot",  tool_instance_snapshot, "Fetch and store instance inventory for fast name resolution"),
-        ("Phone Numbers",      tool_phone_numbers,     "List all claimed phone numbers and their associated contact flows"),
+        ("Instance Snapshot",  tool_instance_snapshot,  "Fetch and store instance inventory for fast name resolution"),
+        ("Phone Numbers",      tool_phone_numbers,      "List all claimed phone numbers and their associated contact flows"),
+        ("Describe Resource",  tool_describe_resource,  "Look up any resource by ARN — queue, flow, user, routing profile, and more"),
     ]),
     ("Settings", [
         ("Settings",           tool_settings,          "View and edit saved instance ID, region, and profile defaults"),
