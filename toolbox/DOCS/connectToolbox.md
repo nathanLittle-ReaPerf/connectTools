@@ -54,9 +54,10 @@ The menu is two levels: pick a **group**, then pick a **tool** within it. Press 
 | 3 | Flow Optimize | `flow_optimize.py` |
 | 4 | Flow Usage | `flow_usage.py` |
 | 5 | Flow Compare | `flow_compare.py` |
-| 6 | Orphaned Resources | `orphaned_resources.py` |
-| 7 | Export Flow | `export_flow.py` |
-| 8 | Flow to Chart | `flow_to_chart.py` |
+| 6 | Flow Promote | `flow_promote.py` |
+| 7 | Orphaned Resources | `orphaned_resources.py` |
+| 8 | Export Flow | `export_flow.py` |
+| 9 | Flow to Chart | `flow_to_chart.py` |
 
 ### Log Insights
 | # | Tool | Script |
@@ -101,6 +102,8 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 **Flow Usage** — Instance ID, Region, Count by (contacts / invocations), Flow name filter, Time window (7d default / 24h / 30d / custom), Output CSV
 
 **Flow Compare** — Left (older) flow JSON file path, Right (newer) flow JSON file path
+
+**Flow Promote** — Dev instance ID / region / profile, Prod instance ID / region / profile, one or more flow names to promote, Dry run (y/n), Publish after import (y/n), Refresh snapshots (y/n), Deploy with unresolved ARNs (y/n), Skip Prod backup (y/n)
 
 **Orphaned Resources** — Instance ID, Region, Verify Lambda ARNs (y/n), Output CSV
 

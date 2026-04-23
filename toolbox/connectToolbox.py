@@ -827,6 +827,46 @@ def tool_flow_compare():
     _run("flow_compare.py", [left, right])
 
 
+# ── Tool: Flow Promote ────────────────────────────────────────────────────────
+
+def tool_flow_promote():
+    _header("Flow Promote")
+
+    print("  Dev instance:\n")
+    iid_dev, region_dev, profile_dev = ask_connect_defaults()
+
+    print("\n  Prod instance:\n")
+    iid_prod    = ask("Prod instance ID")
+    region_prod = ask("Prod region",  required=False, default=region_dev or "")
+    profile_prod = ask("Prod profile", required=False, default="")
+
+    print()
+    names: list[str] = [ask("Flow name to promote")]
+    while ask_bool("Add another flow?", default=False):
+        names.append(ask("Flow name"))
+
+    dry_run    = ask_bool("Dry run (no changes)?",            default=False)
+    publish    = ask_bool("Publish flows after import?",      default=False)
+    refresh    = ask_bool("Refresh snapshots first?",         default=False)
+    skip_unres = ask_bool("Deploy even with unresolved ARNs?", default=False)
+    no_backup  = ask_bool("Skip Prod backup?",                default=False)
+
+    args = ["--dev-instance-id", iid_dev, "--prod-instance-id", iid_prod]
+    for n in names:
+        args += ["--name", n]
+    if region_dev:   args += ["--dev-region",        region_dev]
+    if region_prod:  args += ["--prod-region",        region_prod]
+    if profile_dev:  args += ["--dev-profile",        profile_dev]
+    if profile_prod: args += ["--prod-profile",       profile_prod]
+    if dry_run:      args += ["--dry-run"]
+    if publish:      args += ["--publish"]
+    if refresh:      args += ["--refresh-snapshots"]
+    if skip_unres:   args += ["--skip-unresolved"]
+    if no_backup:    args += ["--no-backup"]
+
+    _run("flow_promote.py", args)
+
+
 # ── Tool: Orphaned Resources ──────────────────────────────────────────────────
 
 def tool_orphaned_resources():
@@ -1231,6 +1271,7 @@ GROUPS = [
         ("Flow Optimize",         tool_flow_optimize,         "Rule-based UX, reliability, and maintainability suggestions"),
         ("Flow Usage",            tool_flow_usage,            "Count how many contacts or invocations hit each flow over a time window"),
         ("Flow Compare",          tool_flow_compare,          "Diff two exported flow JSONs: added, removed, and modified blocks"),
+        ("Flow Promote",          tool_flow_promote,          "Promote flows from Dev to Prod with ARN remapping and dep resolution"),
         ("Orphaned Resources",    tool_orphaned_resources,    "Find flows, queues, prompts, and hours not referenced by any flow"),
         ("Export Flow",           tool_export_flow,           "Export a contact flow definition to JSON by name"),
         ("Flow to Chart",         tool_flow_to_chart,         "Convert an exported flow JSON to a visual flowchart"),
