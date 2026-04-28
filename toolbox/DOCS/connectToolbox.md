@@ -4,7 +4,7 @@ Interactive menu launcher for the Amazon Connect Tools suite.
 
 ## Dependencies
 
-No pip install required. Uses only Python standard library.
+Auto-installs `python-dateutil`, `openpyxl`, and `textual` on first run if missing.
 
 ## Usage
 
@@ -39,12 +39,13 @@ The menu is two levels: pick a **group**, then pick a **tool** within it. Press 
 | 1 | Contacts Handled | `contacts_handled.py` |
 | 2 | Contact Inspect | `contact_inspect.py` |
 | 3 | Contact Timeline | `contact_timeline.py` |
-| 4 | Contact Diff | `contact_diff.py` |
-| 5 | Contact Search | `contact_search.py` |
-| 6 | Contact Recordings | `contact_recordings.py` |
-| 7 | Contact Logs | `contact_logs.py` |
-| 8 | Lambda Tracer | `lambda_tracer.py` |
-| 9 | Lambda Errors | `lambda_errors.py` |
+| 4 | Log Viewer (TUI) | `log_viewer.py` |
+| 5 | Contact Diff | `contact_diff.py` |
+| 6 | Contact Search | `contact_search.py` |
+| 7 | Contact Recordings | `contact_recordings.py` |
+| 8 | Contact Logs | `contact_logs.py` |
+| 9 | Lambda Tracer | `lambda_tracer.py` |
+| 10 | Lambda Errors | `lambda_errors.py` |
 
 ### Flows
 | # | Tool | Script |
@@ -116,6 +117,8 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 **Agent Activity** — Instance ID, Region, Named period or date range, optional agent login filter, Output CSV
 
 **Contact Timeline** — Instance ID, Contact ID, Region, Include transcript (y/n)
+
+**Log Viewer (TUI)** — Instance ID, Contact ID (optional — can be entered in the TUI via [n]), Log group (optional), Region
 
 **Contact Diff** — Instance ID, Contact ID A, Contact ID B, Region, Show all attributes (y/n)
 

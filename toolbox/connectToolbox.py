@@ -542,6 +542,27 @@ def tool_contact_timeline():
     tool_runner("Contact Timeline", "contact_timeline.py", CONTACT_TIMELINE_QUESTIONS)
 
 
+# ── Tool: Log Viewer (TUI) ───────────────────────────────────────────────────
+
+
+def tool_log_viewer():
+    _header("Log Viewer (TUI)")
+    iid, region, profile = ask_connect_defaults()
+    cid       = ask("Contact ID (leave blank to enter in the TUI)", required=False)
+    log_group = ask("Log group (leave blank to auto-discover)", required=False,
+                    default=ct_config.get_log_group(iid))
+
+    if log_group and log_group != ct_config.get_log_group(iid):
+        if ask_bool("Save log group for this instance?", default=True):
+            ct_config.set_log_group(_cfg, iid, log_group)
+
+    args = connect_args(iid, region, profile)
+    if cid:       args += ["--contact-id", cid]
+    if log_group: args += ["--log-group",  log_group]
+
+    _run("log_viewer.py", args)
+
+
 # ── Tool: Contact Diff ────────────────────────────────────────────────────────
 
 
@@ -1258,6 +1279,7 @@ GROUPS = [
         ("Contacts Handled",   tool_contacts_handled,  "Sum CONTACTS_HANDLED across all queues for a month"),
         ("Contact Inspect",    tool_contact_inspect,   "Full deep-dive: attributes, Lens analysis, transfer chain"),
         ("Contact Timeline",   tool_contact_timeline,  "Chronological flow blocks, Lambda calls, and contact milestones"),
+        ("Log Viewer (TUI)",   tool_log_viewer,        "Interactive scrollable timeline: flow blocks, Lambda logs, milestones"),
         ("Contact Diff",       tool_contact_diff,      "Side-by-side diff of two contacts: core fields, attributes, and Lens"),
         ("Contact Search",     tool_contact_search,    "Search contacts by date, channel, agent, queue, or attribute"),
         ("Contact Recordings", tool_contact_recordings,"S3 locations and presigned URLs for recordings and transcripts"),
@@ -1302,7 +1324,7 @@ GROUPS = [
 def _check_dependencies():
     """Check runtime dependencies and AWS credentials before launching the menu.
 
-    - Auto-installs python-dateutil and openpyxl if missing.
+    - Auto-installs python-dateutil, openpyxl, and textual if missing.
     - Prints actionable instructions for anything it can't fix.
     - Hard-exits on missing critical deps; credential issues are warnings only.
     """
@@ -1393,6 +1415,30 @@ def _check_dependencies():
             errors.append((
                 "openpyxl could not be installed automatically",
                 "pip install openpyxl --user",
+            ))
+
+    # textual — required by log_viewer.py TUI; auto-install if missing
+    try:
+        import textual   # noqa: F401
+    except ImportError:
+        print("  textual not found — installing...", flush=True)
+        rc = subprocess.call(
+            [sys.executable, "-m", "pip", "install", "--user",
+             "textual>=0.80.0,<6.3.0"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if rc == 0:
+            import site
+            if hasattr(site, "getusersitepackages"):
+                user_site = site.getusersitepackages()
+                if user_site not in sys.path:
+                    sys.path.append(user_site)
+            print("  textual installed successfully.", flush=True)
+        else:
+            errors.append((
+                "textual could not be installed automatically",
+                "pip install 'textual>=0.80.0,<6.3.0' --user",
             ))
 
     # ct_config.py — must live alongside connectToolbox.py

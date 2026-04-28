@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-04-27
+- **log_viewer.py** — Interactive TUI timeline viewer for an Amazon Connect contact. Scrollable, filterable timeline of flow blocks, Lambda invocations, contact milestones, and Contact Lens turns. Detail panel for raw event JSON; on-demand Lambda log fetch (`[l]`); live filter bar (`/`); new-contact modal (`[n]`); JSON export (`[e]`). Uses `textual` (auto-installed). Data fetched in background threads.
+
 ## 2026-04-23
 - **flow_promote.py** — Promote contact flows from Dev to Prod with full ARN remapping (queues, prompts, sub-flows, Lambdas, HOO, quick connects). Interactive sub-flow dependency resolution; topological deploy order; dry-run, backup, and `--publish` support.
 
