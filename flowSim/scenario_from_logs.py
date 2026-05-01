@@ -422,6 +422,7 @@ def reconstruct_contacts(events: list[dict]) -> dict[str, dict]:
                 "dnis": "",
                 "channel": "",
                 "initial_flow": "",
+                "attr_sources": {},  # attr_key → "flow" or lambda function name
             }
 
         c = contacts[cid]
@@ -460,11 +461,17 @@ def reconstruct_contacts(events: list[dict]) -> dict[str, dict]:
         set_attrs = _extract_set_attributes(ev)
         for k, v in set_attrs.items():
             c["attributes"][k].append(v)
+            if k not in c["attr_sources"]:
+                c["attr_sources"][k] = "flow"
 
         # Lambda
         lambda_data = _extract_lambda_data(ev)
         if lambda_data and lambda_data.get("arn"):
             c["lambda_calls"].append(lambda_data)
+            fn_name = (lambda_data["arn"].split(":")[-1]
+                       if ":" in lambda_data["arn"] else lambda_data["arn"] or "lambda")
+            for k in (lambda_data.get("external") or {}):
+                c["attr_sources"][k] = fn_name  # Lambda source takes priority
 
         # DTMF
         dtmf = _extract_dtmf(ev)
@@ -548,10 +555,12 @@ def build_scenario_from_contact(contact: dict, anonymize: bool = False) -> dict:
             best = _anonymize_value(key, best)
         scenario_attrs[key] = best
         unique_vals = sorted(set(values))
+        source = contact.get("attr_sources", {}).get(key, "")
+        source_str = f"[{source}] " if source else ""
         if len(unique_vals) > 1:
-            attr_hints[key] = f"values seen in this log: {', '.join(unique_vals[:10])}"
+            attr_hints[key] = f"{source_str}values seen: {', '.join(unique_vals[:10])}"
         elif unique_vals:
-            attr_hints[key] = f"value seen: {unique_vals[0]}"
+            attr_hints[key] = f"{source_str}value seen: {unique_vals[0]}"
 
     # ── Lambda mocks ──
     lambda_mocks: dict[str, dict] = {}
@@ -671,6 +680,17 @@ def build_merged_scenario(contacts: dict[str, dict], anonymize: bool = False) ->
             if qid not in all_staffing:
                 all_staffing[qid] = {"staffed": s.get("staffed", True), "channel": s.get("channel",""), "_block": s.get("block",""), "_flow": s.get("flow","")}
 
+    src_votes: dict[str, dict[str, int]] = {}
+    for c in contacts.values():
+        for k, src in c.get("attr_sources", {}).items():
+            if k not in src_votes:
+                src_votes[k] = {}
+            src_votes[k][src] = src_votes[k].get(src, 0) + 1
+
+    def _best_src(key: str) -> str:
+        votes = src_votes.get(key, {})
+        return max(votes, key=lambda s: votes[s]) if votes else ""
+
     scenario_attrs: dict[str, str] = {}
     for k, vals in all_attr_values.items():
         best = _most_common(vals)
@@ -678,10 +698,12 @@ def build_merged_scenario(contacts: dict[str, dict], anonymize: bool = False) ->
             best = _anonymize_value(k, best)
         scenario_attrs[k] = best
         unique_vals = sorted(set(vals))
+        source = _best_src(k)
+        source_str = f"[{source}] " if source else ""
         if len(unique_vals) > 1:
-            attr_hints[k] = f"values seen across {len(vals)} contacts: {', '.join(unique_vals[:10])}"
+            attr_hints[k] = f"{source_str}values seen across {len(vals)} contacts: {', '.join(unique_vals[:10])}"
         elif unique_vals:
-            attr_hints[k] = f"only value seen: {unique_vals[0]}"
+            attr_hints[k] = f"{source_str}only value seen: {unique_vals[0]}"
 
     if anonymize:
         for name, lm in all_lambda.items():
@@ -731,17 +753,36 @@ def print_summary(contacts: dict[str, dict]) -> None:
     print()
 
     if all_attr_values:
-        max_key = max(len(k) for k in all_attr_values)
-        print(f"{'Attribute':<{max_key}}  {'Count':>5}  Top values")
-        print(f"{'-'*max_key}  {'-'*5}  {'-'*40}")
+        src_votes: dict[str, dict[str, int]] = {}
+        for c in contacts.values():
+            for k, src in c.get("attr_sources", {}).items():
+                if k not in src_votes:
+                    src_votes[k] = {}
+                src_votes[k][src] = src_votes[k].get(src, 0) + 1
+
+        def _best_src_summary(key: str) -> str:
+            votes = src_votes.get(key, {})
+            return max(votes, key=lambda s: votes[s]) if votes else "flow"
+
+        by_source: dict[str, list[str]] = {}
         for k in sorted(all_attr_values):
-            vals = all_attr_values[k]
-            counts: dict = {}
-            for v in vals:
-                counts[v] = counts.get(v, 0) + 1
-            top = sorted(counts.items(), key=lambda x: -x[1])[:3]
-            top_str = ", ".join(f"{v!r}({n})" for v, n in top)
-            print(f"{k:<{max_key}}  {len(vals):>5}  {top_str}")
+            by_source.setdefault(_best_src_summary(k), []).append(k)
+
+        for source in sorted(by_source, key=lambda s: (s != "flow", s)):
+            label = "Set by flow" if source == "flow" else f"Returned by Lambda: {source}"
+            print(f"\n  {label}:")
+            keys = by_source[source]
+            max_key = max(len(k) for k in keys)
+            print(f"  {'Attribute':<{max_key}}  {'Count':>5}  Top values")
+            print(f"  {'-'*max_key}  {'-'*5}  {'-'*40}")
+            for k in keys:
+                vals = all_attr_values[k]
+                counts: dict = {}
+                for v in vals:
+                    counts[v] = counts.get(v, 0) + 1
+                top = sorted(counts.items(), key=lambda x: -x[1])[:3]
+                top_str = ", ".join(f"{v!r}({n})" for v, n in top)
+                print(f"  {k:<{max_key}}  {len(vals):>5}  {top_str}")
 
     print()
     lambda_arns: set[str] = set()

@@ -11,6 +11,7 @@ Works on local exported JSON files or live instance flows (single or bulk).
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import re
 import sys
@@ -64,6 +65,10 @@ OPTIONS
     --detail
         Show per-block breakdown in bulk (--all) mode. Without this flag only
         a summary table is shown.
+
+    --csv FILE
+        Write results to a CSV file (one row per issue; clean flows included
+        with empty issue fields).
 
     --json
         Emit raw JSON with issue details.
@@ -508,6 +513,8 @@ examples:
     # Output
     p.add_argument("--detail", action="store_true",
                    help="Show per-block breakdown in bulk mode")
+    p.add_argument("--csv",  default=None, metavar="FILE",
+                   help="Write results to CSV (one row per issue)")
     p.add_argument("--json", action="store_true", dest="output_json",
                    help="Emit raw JSON")
 
@@ -548,6 +555,8 @@ def main():
             print(json.dumps(_to_json_single(flow_name, n_blocks, issues), indent=2))
         else:
             print_flow_result(flow_name, n_blocks, issues)
+        if args.csv:
+            write_csv([(flow_name, n_blocks, issues)], args.csv)
         return
 
     client = make_client(args.region, args.profile)
@@ -583,6 +592,8 @@ def main():
             print(json.dumps(_to_json_single(summary["Name"], n_blocks, issues), indent=2))
         else:
             print_flow_result(summary["Name"], n_blocks, issues)
+        if args.csv:
+            write_csv([(summary["Name"], n_blocks, issues)], args.csv)
         return
 
     # ── Bulk mode (--all) ─────────────────────────────────────────────────────
@@ -611,6 +622,27 @@ def main():
         print_bulk_summary(results)
         if args.detail:
             print_bulk_detail(results)
+    if args.csv:
+        write_csv(results, args.csv)
+
+
+# ── CSV output ───────────────────────────────────────────────────────────────
+
+def write_csv(results: list, path: str) -> None:
+    """Write scan results to a CSV file. One row per issue; clean flows get one row."""
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["flow_name", "block_count", "issue_count",
+                    "severity", "kind", "block_id", "block_type", "detail"])
+        for flow_name, n_blocks, issues in results:
+            if issues:
+                for iss in issues:
+                    w.writerow([flow_name, n_blocks, len(issues),
+                                iss.severity, iss.kind,
+                                iss.block_id, iss.block_type, iss.detail])
+            else:
+                w.writerow([flow_name, n_blocks, 0, "", "", "", "", ""])
+    print(f"  CSV written → {path}", file=sys.stderr)
 
 
 # ── JSON serialisation ────────────────────────────────────────────────────────

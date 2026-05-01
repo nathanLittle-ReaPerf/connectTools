@@ -53,12 +53,13 @@ The menu is two levels: pick a **group**, then pick a **tool** within it. Press 
 | 1 | Flow Scan | `flow_scan.py` |
 | 2 | Flow Attr Search | `flow_attr_search.py` |
 | 3 | Flow Optimize | `flow_optimize.py` |
-| 4 | Flow Usage | `flow_usage.py` |
-| 5 | Flow Compare | `flow_compare.py` |
-| 6 | Flow Promote | `flow_promote.py` |
-| 7 | Orphaned Resources | `orphaned_resources.py` |
-| 8 | Export Flow | `export_flow.py` |
-| 9 | Flow to Chart | `flow_to_chart.py` |
+| 4 | Flow Review (AI) | `flow_review.py` |
+| 5 | Flow Usage | `flow_usage.py` |
+| 6 | Flow Compare | `flow_compare.py` |
+| 7 | Flow Promote | `flow_promote.py` |
+| 8 | Orphaned Resources | `orphaned_resources.py` |
+| 9 | Export Flow | `export_flow.py` |
+| 10 | Flow to Chart | `flow_to_chart.py` |
 
 ### Log Insights
 | # | Tool | Script |
@@ -70,9 +71,10 @@ The menu is two levels: pick a **group**, then pick a **tool** within it. Press 
 | # | Tool | Script |
 |---|---|---|
 | 1 | Agent Activity | `agent_activity.py` |
-| 2 | Agent List | `agent_list.py` |
-| 3 | Routing Profile Audit | `routing_profile_audit.py` |
-| 4 | Security Profile Diff | `security_profile_diff.py` |
+| 2 | Agent Contacts | `agent_contacts.py` |
+| 3 | Agent List | `agent_list.py` |
+| 4 | Routing Profile Audit | `routing_profile_audit.py` |
+| 5 | Security Profile Diff | `security_profile_diff.py` |
 
 ### Instance
 | # | Tool | Script |
@@ -93,11 +95,13 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 
 **Contact Recordings** — Instance ID, Contact ID, Region, URL expiry (seconds, default 3600)
 
-**Flow Scan** — Instance ID, Region, Flow name (or blank for all), Flow type filter, Show per-block detail (y/n)
+**Flow Scan** — Instance ID, Region, Flow name (or blank for all), Flow type filter, Show per-block detail (y/n), Output CSV
 
 **Flow Attr Search** — Attribute name, Source (local file(s) / instance flow / all flows), then path(s) or Instance ID + name/type filter, Exact case match (y/n), Output format (text / json), Show per-block detail (y/n, text mode only), Save to file
 
 **Flow Optimize** — Source (local file / instance flow / all flows), then flow path or Instance ID + name/type filter
+
+**Flow Review (AI)** — Flow JSON file path, Model (default: claude-opus-4-6). Requires `ANTHROPIC_API_KEY`.
 
 
 **Flow Usage** — Instance ID, Region, Count by (contacts / invocations), Flow name filter, Time window (7d default / 24h / 30d / custom), Output CSV
@@ -115,6 +119,8 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 **Log Insights** — Pick a saved query from the `queries/` folder, fill in any placeholders, optionally customize columns, choose a time range (relative or date range), Region, Log group, Max rows, Output file
 
 **Agent Activity** — Instance ID, Region, Named period or date range, optional agent login filter, Output CSV
+
+**Agent Contacts** — Instance ID, Region, Month (YYYY-MM, default previous month), Timezone (default UTC), Output CSV
 
 **Contact Timeline** — Instance ID, Contact ID, Region, Include transcript (y/n)
 

@@ -27,6 +27,7 @@ python flow_scan.py --instance-id <UUID> --all
 | `--all` | Scan all flows in the instance — mutually exclusive with `FLOW_JSON` |
 | `--type` | Filter by flow type when using `--all` (e.g. `CONTACT_FLOW`) |
 | `--detail` | Show per-block issue breakdown in bulk (`--all`) mode; without this flag only a summary table is shown |
+| `--csv FILE` | Write results to a CSV file — one row per issue (clean flows included with empty issue fields) |
 | `--json` | Emit raw JSON with full issue details |
 | `--region` | AWS region — defaults to CloudShell/session region |
 | `--profile` | Named AWS profile for local use |
@@ -48,6 +49,9 @@ python flow_scan.py --instance-id <UUID> --all --type CONTACT_FLOW --detail
 
 # JSON output — filter flows with issues
 python flow_scan.py --instance-id <UUID> --all --json | jq '.flows[] | select(.issue_count > 0)'
+
+# Export all results to CSV (one row per issue; clean flows included with empty issue fields)
+python flow_scan.py --instance-id <UUID> --all --csv scan_results.csv
 ```
 
 ## Output
@@ -102,3 +106,4 @@ connect:DescribeContactFlow
 | Version | Change |
 |---|---|
 | Initial | Core tool: seven issue checks, single/bulk/local-file modes, ERROR/WARN severities, snapshot-based name resolution, JSON output |
+| 2026-05-01 | Added `--csv FILE` output: one row per issue, clean flows included with empty issue fields |

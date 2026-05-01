@@ -542,6 +542,11 @@ def tool_contact_timeline():
     tool_runner("Contact Timeline", "contact_timeline.py", CONTACT_TIMELINE_QUESTIONS)
 
 
+def _maybe_save_log_group(iid: str, log_group: str) -> None:
+    """Save log group to config if it differs from the stored value."""
+    _maybe_save_log_group(iid, log_group)
+
+
 # ── Tool: Log Viewer (TUI) ───────────────────────────────────────────────────
 
 
@@ -552,9 +557,7 @@ def tool_log_viewer():
     log_group = ask("Log group (leave blank to auto-discover)", required=False,
                     default=ct_config.get_log_group(iid))
 
-    if log_group and log_group != ct_config.get_log_group(iid):
-        if ask_bool("Save log group for this instance?", default=True):
-            ct_config.set_log_group(_cfg, iid, log_group)
+    _maybe_save_log_group(iid, log_group)
 
     args = connect_args(iid, region, profile)
     if cid:       args += ["--contact-id", cid]
@@ -608,6 +611,9 @@ def tool_contact_search():
     limit = ask("Max contacts to return", required=False)
     if limit:
         args += ["--limit", limit]
+    offset = ask("Skip first N contacts (offset, leave blank for 0)", required=False)
+    if offset:
+        args += ["--offset", offset]
 
     output = ask("Output CSV file", required=False,
                  default=_out("contact_search", _today(), "csv"))
@@ -631,9 +637,7 @@ def tool_contact_logs():
     output    = ask("Output file", required=False,
                     default=_out("contact_logs", cid, fmt))
 
-    if log_group and log_group != ct_config.get_log_group(iid):
-        if ask_bool("Save log group for this instance?", default=True):
-            ct_config.set_log_group(_cfg, iid, log_group)
+    _maybe_save_log_group(iid, log_group)
 
     args = connect_args(iid, region, profile) + ["--contact-id", cid]
     if log_group: args += ["--log-group", log_group]
@@ -653,9 +657,7 @@ def tool_lambda_tracer():
     output    = ask("Output file", required=False,
                     default=_out("lambda_tracer", cid, "json"))
 
-    if log_group and log_group != ct_config.get_log_group(iid):
-        if ask_bool("Save log group for this instance?", default=True):
-            ct_config.set_log_group(_cfg, iid, log_group)
+    _maybe_save_log_group(iid, log_group)
 
     summary = not ask_bool("Show full Lambda log lines?", default=True)
 
@@ -682,6 +684,8 @@ def tool_flow_scan():
     name   = ask("Flow name (leave blank to scan all)", required=False)
     ftype  = ask("Flow type filter (e.g. CONTACT_FLOW, leave blank for all)", required=False)
     detail = ask_bool("Show per-block detail?") if not name else False
+    output = ask("CSV output file", required=False,
+                 default=_out("flow_scan", _today(), "csv"))
 
     args = connect_args(iid, region, profile)
     if name:
@@ -690,6 +694,7 @@ def tool_flow_scan():
         args += ["--all"]
     if ftype:  args += ["--type",   ftype]
     if detail: args += ["--detail"]
+    if output: args += ["--csv",    output]
 
     _run("flow_scan.py", args)
 
@@ -837,6 +842,18 @@ def tool_flow_optimize():
         if ftype: args += ["--type", ftype]
 
     _run("flow_optimize.py", args)
+
+
+# ── Tool: Flow Review (AI) ────────────────────────────────────────────────────
+
+def tool_flow_review():
+    _header("Flow Review (AI)")
+    path  = ask("Flow JSON file path")
+    model = ask("Model", required=False, default="claude-opus-4-6")
+    args  = [path]
+    if model and model != "claude-opus-4-6":
+        args += ["--model", model]
+    _run("flow_review.py", args)
 
 
 # ── Tool: Flow Compare ────────────────────────────────────────────────────────
@@ -1104,6 +1121,24 @@ def tool_agent_activity():
     _run("agent_activity.py", args)
 
 
+# ── Tool: Agent Contacts ─────────────────────────────────────────────────────
+
+def tool_agent_contacts():
+    _header("Agent Contacts")
+    iid, region, profile = ask_connect_defaults()
+    month  = ask("Month (YYYY-MM, leave blank for previous month)", required=False)
+    tz     = ask("Timezone", required=False, default="UTC")
+    output = ask("CSV output file", required=False,
+                 default=_out("agent_contacts", _today(), "csv"))
+
+    args = connect_args(iid, region, profile)
+    if month:          args += ["--month",    month]
+    if tz and tz != "UTC": args += ["--timezone", tz]
+    if output:         args += ["--csv",      output]
+
+    _run("agent_contacts.py", args)
+
+
 # ── Tool: Agent List ──────────────────────────────────────────────────────────
 
 
@@ -1291,6 +1326,7 @@ GROUPS = [
         ("Flow Scan",             tool_flow_scan,             "Scan flows for broken references, dead ends, missing error handlers"),
         ("Flow Attr Search",      tool_flow_attr_search,      "Find every SET, CHECK, and REF of a contact attribute across flows"),
         ("Flow Optimize",         tool_flow_optimize,         "Rule-based UX, reliability, and maintainability suggestions"),
+        ("Flow Review (AI)",      tool_flow_review,           "AI-powered deep analysis: UX, reliability, structure, and best practices (requires API key)"),
         ("Flow Usage",            tool_flow_usage,            "Count how many contacts or invocations hit each flow over a time window"),
         ("Flow Compare",          tool_flow_compare,          "Diff two exported flow JSONs: added, removed, and modified blocks"),
         ("Flow Promote",          tool_flow_promote,          "Promote flows from Dev to Prod with ARN remapping and dep resolution"),
@@ -1304,6 +1340,7 @@ GROUPS = [
     ]),
     ("Agents", [
         ("Agent Activity",        tool_agent_activity,       "Agent handle time and activity report by date range"),
+        ("Agent Contacts",        tool_agent_contacts,       "CONTACTS_HANDLED per agent for a month, broken down by queue type"),
         ("Agent List",            tool_agent_list,           "List agents with routing profile, hierarchy, and security profiles"),
         ("Routing Profile Audit",  tool_routing_profile_audit,  "Per-profile queue assignments, agent counts, and anomalies"),
         ("Security Profile Diff",  tool_security_profile_diff,  "Diff permissions between two security profiles"),
@@ -1480,7 +1517,22 @@ def _check_dependencies():
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+def _print_help() -> None:
+    print(f"\n  {TITLE}\n")
+    print("  Usage: python connectToolbox.py [--help]\n")
+    for group_name, tools in GROUPS:
+        print(f"  {group_name}:")
+        for t in tools:
+            name = t[0]
+            desc = t[2] if len(t) > 2 else ""
+            print(f"    {name:<30}  {desc}")
+        print()
+
+
 def main():
+    if "--help" in sys.argv or "-h" in sys.argv:
+        _print_help()
+        sys.exit(0)
     _check_dependencies()
     clear_screen()
     group_names = [g[0] for g in GROUPS]

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-05-01
+- **flow_scan.py** — Added `--csv` output (one row per issue; clean flows included with empty issue fields). Toolbox menu now prompts for CSV output path.
+- **connectToolbox.py** — Added `agent_contacts.py` (Agent Contacts) to Agents group and `flow_review.py` (Flow Review AI) to Flows group. Extracted repeated "Save log group?" inline code into `_maybe_save_log_group()` helper. Added `--help` / `-h` flag: prints all tool groups and tool names without launching the interactive menu.
+- **contact_search.py** — Added `--offset N` flag for page-by-page iteration through large result sets (client-side slice after full fetch to respect SearchContacts throttle).
+- **scenario_from_logs.py** — Attributes grouped by source (Lambda function name vs. flow Set Attribute block) in `--summary` output and `_attr_hints` in scenario JSON. Source tracked via new `attr_sources` field on each contact record.
+- **flow_walk.py** — Baseline attribute prompt split into two labeled groups: *Read from incoming state* (must be pre-set) and *Set by this flow* (optional override).
+- **Docs** — Added `agent_contacts.md`, `flow_walk.md`, `flowSim/README.md`. Updated `flow_scan.md` with `--csv` flag and example.
+
 ## 2026-04-27
 - **log_viewer.py** — Interactive TUI timeline viewer for an Amazon Connect contact. Scrollable, filterable timeline of flow blocks, Lambda invocations, contact milestones, and Contact Lens turns. Detail panel for raw event JSON; on-demand Lambda log fetch (`[l]`); live filter bar (`/`); new-contact modal (`[n]`); JSON export (`[e]`). Uses `textual` (auto-installed). Data fetched in background threads.
 

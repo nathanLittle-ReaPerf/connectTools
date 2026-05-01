@@ -614,19 +614,26 @@ def _save_scenario(state: SimState, session: WalkSession,
 _ATTR_NAME_RE = re.compile(r'\$\.Attributes\.([a-zA-Z0-9_]+)')
 
 
-def _discover_attrs(content: dict) -> list[str]:
-    """Return sorted list of all $.Attributes.* names referenced in a flow."""
-    found: set[str] = set()
+def _discover_attrs(content: dict) -> dict[str, str]:
+    """Return {attr_name: source} for all $.Attributes.* names in a flow.
+
+    source is 'flow_set' if the flow sets it via UpdateContactAttributes,
+    'flow_read' if it is only referenced — meaning it must arrive from an
+    earlier flow, a Lambda-to-attribute copy, or another external source.
+    """
+    set_keys: set[str] = set()
+    ref_keys: set[str] = set()
     for action in (content.get("Actions") or []):
-        # Keys set by UpdateContactAttributes blocks
         if action.get("Type") in SET_ATTR_TYPES:
             for key in ((action.get("Parameters") or {}).get("Attributes") or {}):
-                found.add(key)
-        # Any $.Attributes.* reference anywhere in Parameters
+                set_keys.add(key)
         params_str = json.dumps(action.get("Parameters") or {})
         for m in _ATTR_NAME_RE.finditer(params_str):
-            found.add(m.group(1))
-    return sorted(found)
+            ref_keys.add(m.group(1))
+    result: dict[str, str] = {}
+    for k in set_keys | ref_keys:
+        result[k] = "flow_set" if k in set_keys else "flow_read"
+    return result
 
 
 def _prompt_baseline_attrs(
@@ -638,18 +645,30 @@ def _prompt_baseline_attrs(
     if not _ask_bool("Set any attributes before starting?", default=False):
         return
 
-    known = _discover_attrs(flow_content)
-    if known:
-        print(f"  {_D}Discovered {len(known)} attribute(s) — enter value to pin, blank to skip:{_R}")
+    known_map = _discover_attrs(flow_content)
+    read_only = sorted(k for k, s in known_map.items() if s == "flow_read")
+    flow_set  = sorted(k for k, s in known_map.items() if s == "flow_set")
+
+    if known_map:
+        print(f"  {_D}Discovered {len(known_map)} attribute(s) — enter value to pin, blank to skip:{_R}")
     else:
         print(f"  {_D}No attributes discovered in this flow — enter manually:{_R}")
-        known = []
 
     pinned: dict = {}
-    for attr in known:
-        val = _ask(f"  {attr}", default="")
-        if val != "":
-            pinned[attr] = val
+
+    if read_only:
+        print(f"  {_D}  Read from incoming state (not set by this flow):{_R}")
+        for attr in read_only:
+            val = _ask(f"    {attr}", default="")
+            if val != "":
+                pinned[attr] = val
+
+    if flow_set:
+        print(f"  {_D}  Set by this flow (pre-pin to override):{_R}")
+        for attr in flow_set:
+            val = _ask(f"    {attr}", default="")
+            if val != "":
+                pinned[attr] = val
 
     # Allow freeform additions beyond the discovered list
     while True:
@@ -660,7 +679,7 @@ def _prompt_baseline_attrs(
         pinned[extra.strip()] = val
 
     # Review / edit loop — lets the user go back and fix anything they left blank
-    all_known = list(known) + [k for k in pinned if k not in known]
+    all_known = list(known_map.keys()) + [k for k in pinned if k not in known_map]
     while True:
         if pinned:
             print(f"  {_D}Pinned: " + ", ".join(f"{k}='{v}'" for k, v in pinned.items()) + _R)

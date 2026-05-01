@@ -77,6 +77,10 @@ OPTIONS
     --limit N
         Maximum number of contacts to return. Default: all.
 
+    --offset N
+        Skip the first N contacts. Use with --limit for paging.
+        Example: --offset 100 --limit 100 fetches the second page of 100.
+
     --output FILE
         CSV output path. Default: contacts_YYYYMMDD_HHMMSS.csv.
 
@@ -202,6 +206,8 @@ examples:
                    choices=["ASCENDING", "DESCENDING"])
     p.add_argument("--limit", type=int, default=None, metavar="N",
                    help="Maximum number of contacts to return (default: all)")
+    p.add_argument("--offset", type=int, default=0, metavar="N",
+                   help="Skip the first N contacts (use with --limit for paging)")
     p.add_argument("--output", default=None, metavar="FILE",
                    help="CSV output path (default: contacts_YYYYMMDD_HHMMSS.csv)")
     p.add_argument("--json", action="store_true", dest="output_json",
@@ -422,8 +428,11 @@ def main():
         print("Error: --start must be before --end.", file=sys.stderr)
         sys.exit(1)
 
-    limit  = args.limit if args.limit and args.limit > 0 else None
-    client = make_client(args.region, args.profile)
+    offset = args.offset if args.offset and args.offset > 0 else 0
+    # Fetch offset + limit so we have enough to slice client-side
+    fetch_limit = (offset + args.limit) if (args.limit and args.limit > 0) else None
+    limit       = args.limit if args.limit and args.limit > 0 else None
+    client      = make_client(args.region, args.profile)
 
     if args.agent_logins:
         resolved = resolve_agent_logins(client, args.instance_id, args.agent_logins)
@@ -438,7 +447,12 @@ def main():
     if criteria:
         print(f"Filters: {json.dumps(criteria, default=str)}", file=sys.stderr)
 
-    contacts = search_contacts(client, args.instance_id, time_range, criteria, sort, limit)
+    contacts = search_contacts(client, args.instance_id, time_range, criteria, sort, fetch_limit)
+
+    if offset:
+        contacts = contacts[offset:]
+    if limit:
+        contacts = contacts[:limit]
 
     if not contacts:
         print("No contacts found.", file=sys.stderr)
