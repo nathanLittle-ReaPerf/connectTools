@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-05-04
+- **replay_contact.py** — New flowSim tool: contact ID → HTML path visualization in one command. Calls `DescribeContact` for the time window, fetches CloudWatch flow logs, reconstructs the contact record (Lambda responses, DTMF inputs, attributes), writes a scenario to `Scenarios/replay_<cid>.json`, and runs `flow_sim.py` to produce `Simulations/replay_<cid>.html`. Added as "Replay contact from logs" to the flowsim interactive menu.
+
 ## 2026-05-01
 - **flow_scan.py** — Added `--csv` output (one row per issue; clean flows included with empty issue fields). Toolbox menu now prompts for CSV output path.
 - **connectToolbox.py** — Added `agent_contacts.py` (Agent Contacts) to Agents group and `flow_review.py` (Flow Review AI) to Flows group. Extracted repeated "Save log group?" inline code into `_maybe_save_log_group()` helper. Added `--help` / `-h` flag: prints all tool groups and tool names without launching the interactive menu.

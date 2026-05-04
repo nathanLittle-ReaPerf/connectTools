@@ -614,6 +614,45 @@ def action_simulate():
 
     run(cmd)
 
+# ── Action: replay contact from logs ─────────────────────────────────────────
+
+def action_replay():
+    header("Replay Contact  —  replay_contact.py")
+    print("  Fetch a contact's CloudWatch flow logs and generate an HTML")
+    print("  visualization of the exact path it took through the flow.")
+    print()
+
+    instance_id = pick_instance()
+    if not instance_id:
+        return
+
+    if not cached_flow_names(instance_id):
+        print(yellow("  No flow cache found for this instance. Run 'Map Instance' first."))
+        return
+
+    contact_id = ask_required("Contact ID")
+    if not contact_id:
+        return
+
+    cid8 = contact_id[:8]
+    default_html = str(SCRIPT_DIR / "Simulations" / f"replay_{cid8}.html")
+    no_html = not ask_yn("Generate HTML visualization?", default=True)
+    html_path = ""
+    if not no_html:
+        html_path = ask("HTML output path", default=default_html) or default_html
+
+    cmd = [
+        sys.executable, script("replay_contact.py"),
+        "--instance-id", instance_id,
+        "--contact-id",  contact_id,
+    ]
+    if no_html:
+        cmd.append("--no-html")
+    elif html_path and html_path != default_html:
+        cmd += ["--html", html_path]
+
+    run(cmd)
+
 # ── Action: build scenarios from logs ─────────────────────────────────────────
 
 def action_from_logs():
@@ -900,6 +939,7 @@ MENU = [
     ("export_logs", "Export flow logs          — pull CW logs to flowSim/Logs/ for scenario building"),
     ("walk",        "Walk flow interactively   — step through a flow live, answering prompts as they appear"),
     ("simulate",    "Simulate flow             — walk a flow with a scenario file"),
+    ("replay",      "Replay contact from logs  — contact ID → HTML path visualization in one step"),
     ("from_logs",   "Build scenarios from logs — extract real values from CW exports"),
     ("inspect",     "Inspect log file          — preview contacts and attributes in a CW export"),
 ]
@@ -909,6 +949,7 @@ ACTIONS = {
     "export_logs": action_export_logs,
     "walk":        action_walk,
     "simulate":    action_simulate,
+    "replay":      action_replay,
     "from_logs":   action_from_logs,
     "inspect":     action_inspect_logs,
 }
