@@ -980,13 +980,17 @@ function showTab(idx) {{
   }}, 50);
 }}
 
-function focusNode(cy, nodeId) {{
+function focusNode(cy, nodeId, panOnly) {{
   const n = cy.getElementById(nodeId);
   if (!n.length) return;
   cy.nodes().removeClass('highlighted');
   n.addClass('highlighted');
-  const context = n.union(n.incomers('node')).union(n.outgoers('node'));
-  cy.animate({{ fit: {{ eles: context, padding: 80 }}, duration: 300 }});
+  if (panOnly) {{
+    cy.animate({{ center: {{ eles: n }}, duration: 200 }});
+  }} else {{
+    const context = n.union(n.incomers('node')).union(n.outgoers('node'));
+    cy.animate({{ fit: {{ eles: context, padding: 80 }}, duration: 300 }});
+  }}
   updateZoomInput(cy.zoom());
 }}
 
@@ -994,7 +998,7 @@ function focusNode(cy, nodeId) {{
 const allSteps = Array.from(document.querySelectorAll('.step[data-bid]'));
 let activeStepIdx = -1;
 
-function activateStep(idx) {{
+function activateStep(idx, panOnly) {{
   if (idx < 0 || idx >= allSteps.length) return;
   activeStepIdx = idx;
   const el = allSteps[idx];
@@ -1008,24 +1012,24 @@ function activateStep(idx) {{
     showTab(tabIdx);
     setTimeout(() => {{
       const inst = cyInstances[tabIdx];
-      if (inst) focusNode(inst.cy, bid);
+      if (inst) focusNode(inst.cy, bid, panOnly);
     }}, 80);
   }}
 }}
 
 allSteps.forEach((el, idx) => {{
-  el.addEventListener('click', () => activateStep(idx));
+  el.addEventListener('click', () => activateStep(idx, false));
 }});
 
 document.addEventListener('keydown', e => {{
-  if (e.key === 'ArrowDown') {{ e.preventDefault(); activateStep(activeStepIdx + 1); }}
-  if (e.key === 'ArrowUp')   {{ e.preventDefault(); activateStep(activeStepIdx - 1); }}
+  if (e.key === 'ArrowDown') {{ e.preventDefault(); activateStep(activeStepIdx + 1, true); }}
+  if (e.key === 'ArrowUp')   {{ e.preventDefault(); activateStep(activeStepIdx - 1, true); }}
 }});
 
 // Node click in graph → zoom to that node
 function wireNodeClick(cy) {{
   cy.on('tap', 'node', function(e) {{
-    focusNode(cy, e.target.id());
+    focusNode(cy, e.target.id(), false);
   }});
 }}
 
