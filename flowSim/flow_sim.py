@@ -977,7 +977,8 @@ function focusNode(cy, nodeId) {{
   if (!n.length) return;
   cy.nodes().removeClass('highlighted');
   n.addClass('highlighted');
-  cy.animate({{ fit: {{ eles: n, padding: 120 }}, duration: 300 }});
+  const context = n.union(n.incomers('node')).union(n.outgoers('node'));
+  cy.animate({{ fit: {{ eles: context, padding: 80 }}, duration: 300 }});
   updateZoomInput(cy.zoom());
 }}
 
