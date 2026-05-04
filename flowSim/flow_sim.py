@@ -982,22 +982,36 @@ function focusNode(cy, nodeId) {{
   updateZoomInput(cy.zoom());
 }}
 
-// Step click → highlight + zoom to node in graph
-document.querySelectorAll('.step[data-bid]').forEach(el => {{
-  el.addEventListener('click', () => {{
-    const bid = el.dataset.bid;
-    const fid = el.dataset.fid;
-    const tabIdx = flowGraphs.findIndex(fg => fg.flow_id === fid);
-    if (tabIdx >= 0) {{
-      showTab(tabIdx);
-      setTimeout(() => {{
-        const inst = cyInstances[tabIdx];
-        if (inst) focusNode(inst.cy, bid);
-      }}, 80);
-    }}
-    document.querySelectorAll('.step').forEach(s => s.classList.remove('active-step'));
-    el.classList.add('active-step');
-  }});
+// Step click + arrow key navigation
+const allSteps = Array.from(document.querySelectorAll('.step[data-bid]'));
+let activeStepIdx = -1;
+
+function activateStep(idx) {{
+  if (idx < 0 || idx >= allSteps.length) return;
+  activeStepIdx = idx;
+  const el = allSteps[idx];
+  allSteps.forEach(s => s.classList.remove('active-step'));
+  el.classList.add('active-step');
+  el.scrollIntoView({{ block: 'nearest', behavior: 'smooth' }});
+  const bid = el.dataset.bid;
+  const fid = el.dataset.fid;
+  const tabIdx = flowGraphs.findIndex(fg => fg.flow_id === fid);
+  if (tabIdx >= 0) {{
+    showTab(tabIdx);
+    setTimeout(() => {{
+      const inst = cyInstances[tabIdx];
+      if (inst) focusNode(inst.cy, bid);
+    }}, 80);
+  }}
+}}
+
+allSteps.forEach((el, idx) => {{
+  el.addEventListener('click', () => activateStep(idx));
+}});
+
+document.addEventListener('keydown', e => {{
+  if (e.key === 'ArrowDown') {{ e.preventDefault(); activateStep(activeStepIdx + 1); }}
+  if (e.key === 'ArrowUp')   {{ e.preventDefault(); activateStep(activeStepIdx - 1); }}
 }});
 
 // Node click in graph → zoom to that node
