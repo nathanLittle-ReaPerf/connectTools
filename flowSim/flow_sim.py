@@ -1008,12 +1008,18 @@ function activateStep(idx, panOnly) {{
   const bid = el.dataset.bid;
   const fid = el.dataset.fid;
   const tabIdx = flowGraphs.findIndex(fg => fg.flow_id === fid);
-  if (tabIdx >= 0) {{
+  if (tabIdx < 0) return;
+  if (tabIdx !== activeIdx()) {{
+    // Switching tabs — showTab does a fit on init, which is fine
     showTab(tabIdx);
     setTimeout(() => {{
       const inst = cyInstances[tabIdx];
       if (inst) focusNode(inst.cy, bid, panOnly);
     }}, 80);
+  }} else {{
+    // Same tab — go straight to focusNode, don't touch zoom
+    const inst = cyInstances[tabIdx];
+    if (inst) focusNode(inst.cy, bid, panOnly);
   }}
 }}
 
