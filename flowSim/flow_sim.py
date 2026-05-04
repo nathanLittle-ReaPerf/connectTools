@@ -946,7 +946,7 @@ function initCy(idx) {{
   const fg  = flowGraphs[idx];
   const ctr = document.getElementById('cy' + idx);
   const cy  = cytoscape({{
-    container: ctr, elements: fg.elements, wheelSensitivity: 0.8,
+    container: ctr, elements: fg.elements, wheelSensitivity: 0.2,
     style: STYLES,
     layout: {{ name: 'dagre', rankDir: 'TB', nodeSep: 50, rankSep: 70, padding: 30, animate: false, fit: true }},
   }});
