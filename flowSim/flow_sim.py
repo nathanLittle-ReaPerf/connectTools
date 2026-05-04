@@ -205,12 +205,14 @@ def load_flow_cache(instance_id: str) -> tuple[dict[str, dict], dict[str, dict]]
 
 
 def find_flow(name_or_id: str, by_id: dict, by_name: dict) -> dict | None:
-    if name_or_id in by_id:
-        return by_id[name_or_id]
+    # ARNs contain the flow UUID as the last path segment — strip to bare ID
+    lookup_id = name_or_id.split("/")[-1] if "/" in name_or_id else name_or_id
+    if lookup_id in by_id:
+        return by_id[lookup_id]
     lower = name_or_id.lower()
     if lower in by_name:
         return by_name[lower]
-    # Substring match
+    # Substring match on name
     matches = [env for key, env in by_name.items() if lower in key]
     if len(matches) == 1:
         return matches[0]
