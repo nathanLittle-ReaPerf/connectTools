@@ -946,12 +946,20 @@ function initCy(idx) {{
   const fg  = flowGraphs[idx];
   const ctr = document.getElementById('cy' + idx);
   const cy  = cytoscape({{
-    container: ctr, elements: fg.elements, wheelSensitivity: 0.2,
+    container: ctr, elements: fg.elements, wheelSensitivity: 0,
     style: STYLES,
     layout: {{ name: 'dagre', rankDir: 'TB', nodeSep: 50, rankSep: 70, padding: 30, animate: false, fit: true }},
   }});
   cyInstances[idx] = {{ cy, flowId: fg.flow_id }};
   wireNodeClick(cy);
+  // Zoom toward viewport center so selected node stays centered
+  ctr.addEventListener('wheel', function(e) {{
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.12 : (1 / 1.12);
+    const z = Math.max(0.1, Math.min(5, cy.zoom() * factor));
+    cy.zoom({{ level: z, renderedPosition: {{ x: cy.width() / 2, y: cy.height() / 2 }} }});
+    updateZoomInput(cy.zoom());
+  }}, {{ passive: false }});
 }}
 
 function showTab(idx) {{
@@ -977,7 +985,8 @@ function focusNode(cy, nodeId) {{
   if (!n.length) return;
   cy.nodes().removeClass('highlighted');
   n.addClass('highlighted');
-  cy.animate({{ center: {{ eles: n }}, duration: 300 }});
+  const context = n.union(n.incomers('node')).union(n.outgoers('node'));
+  cy.animate({{ fit: {{ eles: context, padding: 80 }}, duration: 300 }});
   updateZoomInput(cy.zoom());
 }}
 
