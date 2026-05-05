@@ -1,7 +1,11 @@
 # Changelog
 
+## 2026-05-05
+- **flow_sim.py HTML viewer** — Arrow key navigation: ↑/↓ steps through the left panel and pans the graph to the selected node without changing zoom level. Scroll wheel now zooms toward the viewport center (keeping the selected node centered) rather than the mouse cursor. Click a step or graph node to fit to that node and its immediate neighbors. Fixed Transfer to Flow ARN lookup — `ContactFlowId` in flow parameters is a full ARN; the simulator now strips to the UUID before cache lookup so sub-flow transfers resolve correctly.
+
 ## 2026-05-04
 - **replay_contact.py** — New flowSim tool: contact ID → HTML path visualization in one command. Calls `DescribeContact` for the time window, fetches CloudWatch flow logs, reconstructs the contact record (Lambda responses, DTMF inputs, attributes), writes a scenario to `Scenarios/replay_<cid>.json`, and runs `flow_sim.py` to produce `Simulations/replay_<cid>.html`. Added as "Replay contact from logs" to the flowsim interactive menu.
+- **Docs** — Added `replay_contact.md`; updated `flow_sim.md` with HTML viewer controls.
 
 ## 2026-05-01
 - **flow_scan.py** — Added `--csv` output (one row per issue; clean flows included with empty issue fields). Toolbox menu now prompts for CSV output path.

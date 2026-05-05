@@ -101,8 +101,11 @@ Step  Flow                    Block                  Type             Branch    
 ### HTML visualization (`sim_<flow-name>.html`)
 
 A split-panel view:
-- **Left panel** — scrollable step trace with flow/block/type/branch/action columns. Click a row to highlight the corresponding node in the graph.
-- **Right panel** — Cytoscape.js flow graph with a tab per flow. Visited nodes are highlighted green; unvisited nodes are dimmed. Steps link to nodes on click.
+- **Left panel** — scrollable numbered step trace. Click a row to fit the graph to that node and its immediate neighbors. Use **↑ / ↓ arrow keys** to navigate step by step — the graph pans smoothly to the selected node without changing the zoom level.
+- **Right panel** — Cytoscape.js flow graph with a tab per flow. Visited nodes are highlighted green; unvisited nodes are dimmed.
+  - **Scroll wheel** — zooms toward the viewport center, keeping the selected node centered.
+  - **Zoom controls** — `−` / `+` buttons and a `%` input field in the tab bar. Click ⊡ to fit all nodes.
+  - **Click a node** in the graph to fit to that node and its neighbors.
 
 ### JSON output (`--json`)
 
