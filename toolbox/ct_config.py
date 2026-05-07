@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
+
+_LOG_GROUP_RE = re.compile(r'^[\.\-_/#A-Za-z0-9]+$')
 
 CONFIG_FILE  = Path.home() / ".connecttools" / "config.json"
 # Root of the connectTools repo (parent of the toolbox/ directory)
@@ -32,8 +35,13 @@ FIELDS = [
 
 
 def get_log_group(instance_id: str) -> str:
-    """Return the saved log group for this instance, or empty string."""
-    return load().get("log_groups", {}).get(instance_id, "")
+    """Return the saved log group for this instance, or empty string.
+
+    Returns empty string if the stored value contains invalid characters
+    (guards against config corruption).
+    """
+    value = load().get("log_groups", {}).get(instance_id, "")
+    return value if _LOG_GROUP_RE.match(value) else ""
 
 
 def set_log_group(data: dict, instance_id: str, log_group: str) -> None:
