@@ -782,7 +782,8 @@ def tool_flow_attr_search():
 
 # ── Tool: Flow Usage ──────────────────────────────────────────────────────────
 
-_FLOW_USAGE_WINDOWS = ["last 7d (default)", "last 24h", "last 30d", "custom"]
+_FLOW_USAGE_WINDOWS   = ["last 7d (default)", "last 24h", "last 30d", "custom"]
+_FLOW_TRAFFIC_WINDOWS = ["last 24h (default)", "last 7d", "last 1h", "custom"]
 
 def tool_flow_usage():
     _header("Flow Usage")
@@ -817,6 +818,57 @@ def tool_flow_usage():
     if csv_out: args += ["--csv", csv_out]
 
     _run("flow_usage.py", args)
+
+
+# ── Tool: Flow Traffic ───────────────────────────────────────────────────────
+
+def tool_flow_traffic():
+    _header("Flow Traffic")
+    iid, region, profile = ask_connect_defaults()
+
+    contact_id = ask("Contact ID (leave blank for all contacts)", required=False)
+
+    if not contact_id:
+        flow_filter = ask("Flow name filter (leave blank for all)", required=False)
+        window_choice = ask_choice("Time window", _FLOW_TRAFFIC_WINDOWS, default="last 24h (default)")
+
+    args = connect_args(iid, region, profile)
+    if contact_id:
+        args += ["--contact-id", contact_id]
+    else:
+        if flow_filter: args += ["--flow", flow_filter]
+
+        if window_choice == "last 24h (default)":
+            pass
+        elif window_choice == "last 7d":
+            args += ["--last", "7d"]
+        elif window_choice == "last 1h":
+            args += ["--last", "1h"]
+        else:
+            last = ask("Duration (e.g. 4h, 7d) or leave blank for --start/--end", required=False)
+            if last:
+                args += ["--last", last]
+            else:
+                start = ask("Start (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)")
+                end   = ask("End   (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)", required=False)
+                args += ["--start", start]
+                if end: args += ["--end", end]
+
+        max_contacts = ask("Max contacts to fetch (default 200, 0 for unlimited)", required=False)
+        if max_contacts: args += ["--max", max_contacts]
+
+    view = ask_choice("Output", ["counts + paths", "counts only", "JSON"], default="counts + paths")
+    if view == "counts only":
+        args += ["--no-paths"]
+    elif view == "JSON":
+        args += ["--json"]
+
+    csv_out = ask("CSV output file (leave blank to skip)", required=False,
+                  default=_out("flow_traffic", _today(), "csv"))
+    if csv_out and view != "JSON":
+        args += ["--csv", csv_out]
+
+    _run("flow_traffic.py", args)
 
 
 # ── Tool: Flow Optimize ───────────────────────────────────────────────────────
@@ -1328,6 +1380,7 @@ GROUPS = [
         ("Flow Optimize",         tool_flow_optimize,         "Rule-based UX, reliability, and maintainability suggestions"),
         ("Flow Review (AI)",      tool_flow_review,           "AI-powered deep analysis: UX, reliability, structure, and best practices (requires API key)"),
         ("Flow Usage",            tool_flow_usage,            "Count how many contacts or invocations hit each flow over a time window"),
+        ("Flow Traffic",          tool_flow_traffic,          "Flow entry counts and per-contact flow paths from CloudWatch logs"),
         ("Flow Compare",          tool_flow_compare,          "Diff two exported flow JSONs: added, removed, and modified blocks"),
         ("Flow Promote",          tool_flow_promote,          "Promote flows from Dev to Prod with ARN remapping and dep resolution"),
         ("Orphaned Resources",    tool_orphaned_resources,    "Find flows, queues, prompts, and hours not referenced by any flow"),
