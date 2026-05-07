@@ -544,7 +544,9 @@ def tool_contact_timeline():
 
 def _maybe_save_log_group(iid: str, log_group: str) -> None:
     """Save log group to config if it differs from the stored value."""
-    _maybe_save_log_group(iid, log_group)
+    if log_group and log_group != ct_config.get_log_group(iid):
+        cfg = ct_config.load()
+        ct_config.set_log_group(cfg, iid, log_group)
 
 
 # ── Tool: Log Viewer (TUI) ───────────────────────────────────────────────────
