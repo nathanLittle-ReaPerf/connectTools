@@ -239,6 +239,7 @@ class Step:
     type_label:    str
     action_desc:   str
     branch:        str
+    invocation:    int   = 0
     next_block_id: str   = ""
     terminal:      bool  = False
     is_transfer:   bool  = False
@@ -508,6 +509,7 @@ def _run_flow(
     env: dict, state: SimState, scenario: dict,
     by_id: dict, by_name: dict, interactive: bool,
     path: list[Step], depth: int,
+    inv_counter: list[int],
 ) -> None:
     if depth > MAX_DEPTH:
         path.append(Step(
@@ -516,6 +518,9 @@ def _run_flow(
             branch="", terminal=True,
         ))
         return
+
+    inv_counter[0] += 1
+    inv = inv_counter[0]
 
     content    = env.get("content") or {}
     flow_name  = (env.get("metadata") or {}).get("name", "?")
@@ -531,7 +536,7 @@ def _run_flow(
                 block_id=current_id, block_label="[LOOP]",
                 block_type="", type_label="",
                 action_desc="Loop detected — stopping", branch="",
-                terminal=True,
+                invocation=inv, terminal=True,
             ))
             break
         visited.add(current_id)
@@ -543,7 +548,7 @@ def _run_flow(
                 block_id=current_id, block_label=f"[MISSING {current_id[:10]}]",
                 block_type="", type_label="",
                 action_desc="Block not found in flow", branch="",
-                terminal=True,
+                invocation=inv, terminal=True,
             ))
             break
 
@@ -559,6 +564,7 @@ def _run_flow(
             block_id=current_id, block_label=blabel,
             block_type=btype, type_label=TYPE_LABELS.get(btype, btype),
             action_desc=action_desc, branch=branch,
+            invocation=inv,
             next_block_id=next_id,
             terminal=is_terminal,
             is_transfer=bool(transfer_target),
@@ -571,14 +577,14 @@ def _run_flow(
         if transfer_target:
             sub = by_id.get(transfer_target) or find_flow(transfer_target, by_id, by_name)
             if sub:
-                _run_flow(sub, state, scenario, by_id, by_name, interactive, path, depth + 1)
+                _run_flow(sub, state, scenario, by_id, by_name, interactive, path, depth + 1, inv_counter)
             else:
                 path.append(Step(
                     flow_id=flow_id, flow_name=flow_name,
                     block_id=current_id, block_label=blabel,
                     block_type="", type_label="",
                     action_desc=f"Target flow not in cache: {transfer_target[:20]}",
-                    branch="", terminal=True,
+                    branch="", invocation=inv, terminal=True,
                 ))
             break
 
@@ -605,8 +611,34 @@ def simulate(
         sys.exit(1)
 
     path: list[Step] = []
-    _run_flow(start_env, state, scenario, by_id, by_name, interactive, path, depth=0)
+    inv_counter = [0]
+    _run_flow(start_env, state, scenario, by_id, by_name, interactive, path, depth=0, inv_counter=inv_counter)
     return path, state
+
+
+# ── Invocation label map ──────────────────────────────────────────────────────
+
+def _invocation_labels(path: list[Step]) -> dict[int, str]:
+    """Map invocation number → display label, adding (2)/(3) suffixes for repeated flows."""
+    seen: list[tuple[int, str]] = []
+    seen_keys: set[tuple[int, str]] = set()
+    for s in path:
+        key = (s.invocation, s.flow_name)
+        if s.flow_id and key not in seen_keys:
+            seen_keys.add(key)
+            seen.append(key)
+    name_total: dict[str, int] = {}
+    for _, name in seen:
+        name_total[name] = name_total.get(name, 0) + 1
+    name_seen: dict[str, int] = {}
+    result: dict[int, str] = {}
+    for inv, name in seen:
+        if name_total[name] > 1:
+            name_seen[name] = name_seen.get(name, 0) + 1
+            result[inv] = f"{name} ({name_seen[name]})"
+        else:
+            result[inv] = name
+    return result
 
 
 # ── Text output ────────────────────────────────────────────────────────────────
@@ -636,11 +668,12 @@ def print_trace(path: list[Step], state: SimState, scenario: dict) -> None:
     print(f"  Channel: {cp.get('channel', 'VOICE')}")
     print()
 
-    cur_flow = None
+    inv_labels = _invocation_labels(path)
+    cur_inv = None
     for i, step in enumerate(path, 1):
-        if step.flow_name != cur_flow:
-            cur_flow = step.flow_name
-            print(f"  {_DIM}── {cur_flow} ──{_RESET}")
+        if step.invocation != cur_inv:
+            cur_inv = step.invocation
+            print(f"  {_DIM}── {inv_labels.get(cur_inv, step.flow_name)} ──{_RESET}")
 
         color = _KIND_COLOR.get(step.type_label, "")
         tl    = f"{color}{step.type_label or step.block_type:<18}{_RESET}"
@@ -722,22 +755,27 @@ def _param_hint(action: dict) -> str:
 
 
 def build_html(path: list[Step], state: SimState, scenario: dict, by_id: dict, by_name: dict) -> str:
-    # Collect unique flows in path order
-    seen_flows: list[tuple[str, str]] = []  # (flow_id, flow_name)
-    for step in path:
-        if step.flow_id and (step.flow_id, step.flow_name) not in seen_flows:
-            seen_flows.append((step.flow_id, step.flow_name))
+    inv_labels = _invocation_labels(path)
 
-    # Build per-flow visited sets
+    # Collect unique invocations in path order
+    seen_inv_keys: set[tuple[int, str]] = set()
+    seen_invs: list[tuple[int, str, str]] = []  # (invocation, flow_id, flow_name)
+    for step in path:
+        key = (step.invocation, step.flow_id)
+        if step.flow_id and key not in seen_inv_keys:
+            seen_inv_keys.add(key)
+            seen_invs.append((step.invocation, step.flow_id, step.flow_name))
+
+    # Build per-invocation visited sets
     flow_graphs: list[dict] = []
-    for flow_id, flow_name in seen_flows:
+    for inv, flow_id, flow_name in seen_invs:
         env = by_id.get(flow_id)
         if not env:
             continue
         content = env.get("content") or {}
         nodes, edges, start_id = _build_graph(content)
 
-        flow_steps  = [s for s in path if s.flow_id == flow_id]
+        flow_steps   = [s for s in path if s.invocation == inv]
         visited_nids = {node_id(s.block_id) for s in flow_steps}
         visited_enids = {
             f"{node_id(s.block_id)}->{node_id(s.next_block_id)}"
@@ -774,18 +812,20 @@ def build_html(path: list[Step], state: SimState, scenario: dict, by_id: dict, b
             }})
 
         flow_graphs.append({
-            "flow_id":   flow_id,
-            "flow_name": flow_name,
-            "elements":  elements,
+            "invocation": inv,
+            "flow_id":    flow_id,
+            "flow_name":  flow_name,
+            "tab_label":  inv_labels.get(inv, flow_name),
+            "elements":   elements,
         })
 
     # ── Step trace HTML ───────────────────────────────────────────────────────
     step_rows = []
-    cur_flow = None
+    cur_inv = None
     for i, step in enumerate(path):
-        if step.flow_name != cur_flow:
-            cur_flow = step.flow_name
-            step_rows.append(f'<div class="flow-divider">{_he(cur_flow)}</div>')
+        if step.invocation != cur_inv:
+            cur_inv = step.invocation
+            step_rows.append(f'<div class="flow-divider">{_he(inv_labels.get(cur_inv, step.flow_name))}</div>')
 
         color_cls = {
             "Lambda": "lam", "Check Attribute": "chk",
@@ -799,7 +839,7 @@ def build_html(path: list[Step], state: SimState, scenario: dict, by_id: dict, b
         term_badge = '<span class="badge-term">end</span>' if step.terminal else ""
         desc_html  = f'<div class="step-desc">{_he(step.action_desc)}</div>' if step.action_desc else ""
 
-        step_rows.append(f"""<div class="step {color_cls}" data-bid="{_he(node_id(step.block_id))}" data-fid="{_he(step.flow_id)}">
+        step_rows.append(f"""<div class="step {color_cls}" data-bid="{_he(node_id(step.block_id))}" data-inv="{step.invocation}">
   <span class="step-num">{i+1}</span>
   <div class="step-body">
     <div class="step-header"><span class="step-type">{_he(step.type_label or step.block_type)}</span> <span class="step-label">{_he(step.block_label)}</span>{term_badge}</div>
@@ -817,7 +857,7 @@ def build_html(path: list[Step], state: SimState, scenario: dict, by_id: dict, b
 
     # ── Tab buttons ───────────────────────────────────────────────────────────
     tab_buttons = "".join(
-        f'<button class="tab-btn{" active" if i == 0 else ""}" onclick="showTab({i})">{_he(fg["flow_name"])}</button>'
+        f'<button class="tab-btn{" active" if i == 0 else ""}" onclick="showTab({i})">{_he(fg["tab_label"])}</button>'
         for i, fg in enumerate(flow_graphs)
     )
     cy_containers = "".join(
@@ -1008,8 +1048,8 @@ function activateStep(idx, panOnly) {{
   el.classList.add('active-step');
   el.scrollIntoView({{ block: 'nearest', behavior: 'smooth' }});
   const bid = el.dataset.bid;
-  const fid = el.dataset.fid;
-  const tabIdx = flowGraphs.findIndex(fg => fg.flow_id === fid);
+  const inv = parseInt(el.dataset.inv, 10);
+  const tabIdx = flowGraphs.findIndex(fg => fg.invocation === inv);
   if (tabIdx < 0) return;
   if (tabIdx !== activeIdx()) {{
     // Switching tabs — showTab does a fit on init, which is fine
