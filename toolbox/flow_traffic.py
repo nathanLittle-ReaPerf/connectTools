@@ -380,10 +380,8 @@ def _ts(epoch_ms: int | None) -> str:
     return dt.datetime.fromtimestamp(epoch_ms / 1000, tz=dt.timezone.utc).strftime("%m-%d %H:%M")
 
 
-def _path_str(path: list, max_flows: int = 8) -> str:
+def _path_str(path: list) -> str:
     names = [step["name"] or step["id"][:8] for step in path]
-    if len(names) > max_flows:
-        return " > ".join(names[:max_flows]) + f"  (+{len(names) - max_flows} more)"
     return " > ".join(names) if names else "(no flows)"
 
 
