@@ -434,12 +434,18 @@ def print_human(counts, sequences, start, end, instance_id, no_paths):
 
 # ── CSV / JSON output ─────────────────────────────────────────────────────────
 
-def write_csv(sequences: dict, path: str):
+def write_csv(counts: list, sequences: dict, path: str):
     out = ct_config.output_dir("flow_traffic") / path if not path.startswith(("/", "\\")) and ":" not in path else None
     dest = str(out) if out else path
     sorted_contacts = sorted(sequences.items(), key=lambda kv: kv[1]["start_ts"] or 0, reverse=True)
     with open(dest, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
+        w.writerow(["FLOW COUNTS", "", ""])
+        w.writerow(["flow", "entries", "contacts"])
+        for r in counts:
+            w.writerow([r["flow"], r["entries"], r["contacts"]])
+        w.writerow([])
+        w.writerow(["CONTACT PATHS", "", "", ""])
         w.writerow(["contact_id", "start_time", "flow_count", "path"])
         for cid, data in sorted_contacts:
             ts_str   = _ts(data["start_ts"])
@@ -535,7 +541,7 @@ def main():
     print_human(counts, sequences, start, end, args.instance_id, args.no_paths)
 
     if args.csv:
-        dest = write_csv(sequences, args.csv)
+        dest = write_csv(counts, sequences, args.csv)
         print(f"  Saved → {dest}", file=sys.stderr)
 
 
