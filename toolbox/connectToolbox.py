@@ -863,10 +863,11 @@ def tool_flow_traffic():
     elif view == "JSON":
         args += ["--json"]
 
-    csv_out = ask("CSV output file (leave blank to skip)", required=False,
-                  default=_out("flow_traffic", _today(), "csv"))
-    if csv_out and view != "JSON":
-        args += ["--csv", csv_out]
+    if view != "JSON":
+        csv_out = ask("CSV output file (leave blank to skip)", required=False,
+                      default=_out("flow_traffic", _today(), "csv"))
+        if csv_out:
+            args += ["--csv", csv_out]
 
     _run("flow_traffic.py", args)
 
