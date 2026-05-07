@@ -154,8 +154,10 @@ examples:
                    help="Max contacts to fetch (default 200; 0 = unlimited)")
     p.add_argument("--no-paths", action="store_true",
                    help="Show flow counts only; suppress the contact paths table")
-    p.add_argument("--csv",  default=None, metavar="FILE")
-    p.add_argument("--json", action="store_true", dest="output_json")
+    p.add_argument("--csv",    default=None, metavar="FILE")
+    p.add_argument("--json",   action="store_true", dest="output_json")
+    p.add_argument("--output", default=None, metavar="FILE",
+                   help="Save JSON output to a file (implies --json)")
     return p.parse_args()
 
 
@@ -519,8 +521,15 @@ def main():
 
     counts = compute_counts(sequences)
 
-    if args.output_json:
-        print(json.dumps(build_json(counts, sequences, start, end, args.instance_id), indent=2))
+    if args.output_json or args.output:
+        payload = json.dumps(build_json(counts, sequences, start, end, args.instance_id), indent=2)
+        if args.output:
+            out = ct_config.output_dir("flow_traffic") / args.output if not args.output.startswith(("/", "\\")) and ":" not in args.output else args.output
+            with open(str(out), "w", encoding="utf-8") as f:
+                f.write(payload)
+            print(f"  Saved → {out}", file=sys.stderr)
+        else:
+            print(payload)
         return
 
     print_human(counts, sequences, start, end, args.instance_id, args.no_paths)

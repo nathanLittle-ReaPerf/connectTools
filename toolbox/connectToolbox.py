@@ -861,7 +861,12 @@ def tool_flow_traffic():
     if view == "counts only":
         args += ["--no-paths"]
     elif view == "JSON":
-        args += ["--json"]
+        json_out = ask("JSON output file", required=False,
+                       default=_out("flow_traffic", _today(), "json"))
+        if json_out:
+            args += ["--output", json_out]
+        else:
+            args += ["--json"]
 
     if view != "JSON":
         csv_out = ask("CSV output file (leave blank to skip)", required=False,
