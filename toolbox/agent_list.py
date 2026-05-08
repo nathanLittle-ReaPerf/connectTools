@@ -18,7 +18,7 @@ import ct_snapshot
 RETRY_CONFIG = Config(retries={"max_attempts": 5, "mode": "adaptive"})
 
 CSV_COLUMNS = [
-    "Username", "FirstName", "LastName", "Email",
+    "Status", "Username", "FirstName", "LastName", "Email",
     "RoutingProfile", "SecurityProfiles", "HierarchyGroup",
     "PhoneType", "UserId",
 ]
@@ -36,6 +36,57 @@ def make_client(region: str | None, profile: str | None):
 
 
 # ── Data fetchers ──────────────────────────────────────────────────────────────
+
+def get_current_statuses(client, instance_id: str) -> dict:
+    """Return {agent_id: status_name} for agents currently logged into the CCP.
+
+    Uses GetCurrentUserData filtered by all routing profiles. Agents not
+    returned by this API are currently offline / not logged in.
+    """
+    rp_ids: list = []
+    token = None
+    while True:
+        kwargs: dict = {"InstanceId": instance_id, "MaxResults": 100}
+        if token:
+            kwargs["NextToken"] = token
+        try:
+            resp = client.list_routing_profiles(**kwargs)
+        except ClientError:
+            return {}
+        rp_ids += [rp["Id"] for rp in resp.get("RoutingProfileSummaryList", [])]
+        token = resp.get("NextToken")
+        if not token:
+            break
+
+    if not rp_ids:
+        return {}
+
+    statuses: dict = {}
+    for i in range(0, len(rp_ids), 100):
+        batch = rp_ids[i:i + 100]
+        token = None
+        while True:
+            kwargs = {
+                "InstanceId": instance_id,
+                "Filters": {"RoutingProfiles": batch},
+                "MaxResults": 100,
+            }
+            if token:
+                kwargs["NextToken"] = token
+            try:
+                resp = client.get_current_user_data(**kwargs)
+            except ClientError:
+                break
+            for ud in resp.get("UserDataList", []):
+                agent_id    = ud["User"]["Id"]
+                status_name = ud.get("Status", {}).get("StatusName", "Unknown")
+                statuses[agent_id] = status_name
+            token = resp.get("NextToken")
+            if not token:
+                break
+
+    return statuses
+
 
 def list_user_summaries(client, instance_id: str, search: str | None) -> list[dict]:
     """Paginate ListUsers; filter by username substring if --search given."""
@@ -151,6 +202,8 @@ def print_table(rows: list[dict]):
         return
 
     cols = ["Username", "FirstName", "LastName", "RoutingProfile", "HierarchyGroup"]
+    if rows and "Status" in rows[0]:
+        cols.insert(0, "Status")
     widths = {c: len(c) for c in cols}
     for row in rows:
         for c in cols:
@@ -199,6 +252,13 @@ OPTIONS
         Filter by routing profile name (case-insensitive substring).
         Applied after fetching user details.
 
+    --status active|inactive|all
+        Filter by real-time login status (requires GetCurrentUserData).
+        active   — show only agents currently logged into the CCP
+        inactive — show only agents currently offline / not logged in
+        all      — show all agents with a Status column added
+        Always adds a Status column to the output.
+
     --region REGION
         AWS region (e.g. us-east-1). Defaults to the session or CloudShell region.
 
@@ -233,6 +293,8 @@ IAM PERMISSIONS
     connect:DescribeRoutingProfile
     connect:DescribeUserHierarchyGroup
     connect:DescribeSecurityProfile
+    connect:ListRoutingProfiles      (when --status used)
+    connect:GetCurrentUserData       (when --status used)
 
 NOTES
     Routing profile, hierarchy group, and security profile names are resolved
@@ -264,6 +326,10 @@ examples:
                    help="Case-insensitive substring match on username")
     p.add_argument("--routing-profile",  default=None,  metavar="NAME",
                    help="Filter by routing profile name (case-insensitive substring)")
+    p.add_argument("--status", default=None, choices=["active", "inactive", "all"],
+                   metavar="STATUS",
+                   help="Filter by real-time login status: active (logged in), "
+                        "inactive (offline), all (show status column, no filter)")
     p.add_argument("--region",           default=None)
     p.add_argument("--profile",          default=None)
     p.add_argument("--csv",              default=None,  metavar="PATH", dest="csv_path",
@@ -287,6 +353,17 @@ examples:
     if args.routing_profile:
         needle = args.routing_profile.lower()
         rows = [r for r in rows if needle in r["RoutingProfile"].lower()]
+
+    if args.status:
+        print("  Fetching real-time agent statuses...", end=" ", flush=True, file=sys.stderr)
+        statuses = get_current_statuses(client, args.instance_id)
+        print(f"{len(statuses)} logged in.", file=sys.stderr)
+        if args.status == "active":
+            rows = [r for r in rows if r["UserId"] in statuses]
+        elif args.status == "inactive":
+            rows = [r for r in rows if r["UserId"] not in statuses]
+        for r in rows:
+            r["Status"] = statuses.get(r["UserId"], "Offline")
 
     if not rows:
         print("No agents matched after filtering.")

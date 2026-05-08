@@ -499,6 +499,9 @@ CID_JOURNEY_QUESTIONS = [
 AGENT_LIST_QUESTIONS = [
     {"label": "Search username (leave blank for all)", "arg": "--search", "required": False},
     {"label": "Filter by routing profile name", "arg": "--routing-profile", "required": False},
+    {"label": "Status filter", "arg": "--status", "type": "choice",
+     "choices": ["(none)", "active", "inactive", "all"], "default": "(none)",
+     "val_map": {"(none)": None}},
     {"label": "Output CSV file", "arg": "--csv", "required": False,
      "default_fn": lambda: _out("agent_list", _today(), "csv")},
 ]
