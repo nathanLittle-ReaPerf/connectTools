@@ -314,6 +314,39 @@ def ask_bool(label: str, default: bool = False) -> bool:
     return default if not val else val in ("y", "yes")
 
 
+# ── Time window helper ───────────────────────────────────────────────────────
+
+def ask_time_window(default_last: str = "24h", presets: list = None) -> list:
+    """Prompt for a time window and return CLI args.
+
+    presets: quick-pick durations e.g. ["24h", "7d", "30d"]; first entry is
+             the default. Always appends a "custom" choice at the end.
+    default_last: default duration shown when entering a custom relative window.
+
+    Returns e.g. ["--last", "7d"] or ["--start", "2026-05-01", "--end", "2026-05-08"].
+    """
+    if presets:
+        choices = [f"last {p}" for p in presets] + ["custom"]
+        choice  = ask_choice("Time window", choices, default=f"last {presets[0]}")
+        if choice != "custom":
+            return ["--last", choice.split(" ", 1)[1]]
+        mode = ask_choice("Custom window", ["Relative duration", "Date range"],
+                          default="Relative duration")
+    else:
+        mode = ask_choice("Time window", ["Relative duration", "Date range"],
+                          default="Relative duration")
+
+    if "Date" in mode:
+        start  = ask_date("Start", ["YYYY-MM-DD", "YYYY-MM-DDTHH:MM:SS"])
+        end    = ask_date("End",   ["YYYY-MM-DD", "YYYY-MM-DDTHH:MM:SS"], required=False)
+        result = ["--start", start]
+        if end: result += ["--end", end]
+        return result
+    else:
+        last = ask("Duration (e.g. 4h, 7d)", default=default_last)
+        return ["--last", last]
+
+
 # ── Config helpers ────────────────────────────────────────────────────────────
 
 def _offer_save(iid: str, region: str, profile: str) -> None:
@@ -784,9 +817,6 @@ def tool_flow_attr_search():
 
 # ── Tool: Flow Usage ──────────────────────────────────────────────────────────
 
-_FLOW_USAGE_WINDOWS   = ["last 7d (default)", "last 24h", "last 30d", "custom"]
-_FLOW_TRAFFIC_WINDOWS = ["last 24h (default)", "last 7d", "last 1h", "custom"]
-
 def tool_flow_usage():
     _header("Flow Usage")
     iid, region, profile = ask_connect_defaults()
@@ -794,26 +824,9 @@ def tool_flow_usage():
     by_mode = ask_choice("Count by", ["contacts", "invocations"], default="contacts")
     flow    = ask("Flow name filter (leave blank for all)", required=False)
 
-    window_choice = ask_choice("Time window", _FLOW_USAGE_WINDOWS, default="last 7d (default)")
-
     args = connect_args(iid, region, profile) + ["--by", by_mode]
     if flow: args += ["--flow", flow]
-
-    if window_choice == "last 7d (default)":
-        pass  # default
-    elif window_choice == "last 24h":
-        args += ["--last", "24h"]
-    elif window_choice == "last 30d":
-        args += ["--last", "30d"]
-    else:  # custom
-        last = ask("Duration (e.g. 4h, 7d) or leave blank for --start/--end", required=False)
-        if last:
-            args += ["--last", last]
-        else:
-            start = ask("Start (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)")
-            end   = ask("End   (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)", required=False)
-            args += ["--start", start]
-            if end: args += ["--end", end]
+    args += ask_time_window(default_last="7d", presets=["7d", "24h", "30d"])
 
     csv_out = ask("CSV output file", required=False,
                   default=_out("flow_usage", _today(), "csv"))
@@ -832,30 +845,13 @@ def tool_flow_traffic():
 
     if not contact_id:
         flow_filter = ask("Flow name filter (leave blank for all)", required=False)
-        window_choice = ask_choice("Time window", _FLOW_TRAFFIC_WINDOWS, default="last 24h (default)")
 
     args = connect_args(iid, region, profile)
     if contact_id:
         args += ["--contact-id", contact_id]
     else:
         if flow_filter: args += ["--flow", flow_filter]
-
-        if window_choice == "last 24h (default)":
-            pass
-        elif window_choice == "last 7d":
-            args += ["--last", "7d"]
-        elif window_choice == "last 1h":
-            args += ["--last", "1h"]
-        else:
-            last = ask("Duration (e.g. 4h, 7d) or leave blank for --start/--end", required=False)
-            if last:
-                args += ["--last", last]
-            else:
-                start = ask("Start (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)")
-                end   = ask("End   (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)", required=False)
-                args += ["--start", start]
-                if end: args += ["--end", end]
-
+        args += ask_time_window(default_last="24h", presets=["24h", "7d", "1h"])
         max_contacts = ask("Max contacts to fetch (default 200, 0 for unlimited)", required=False)
         if max_contacts: args += ["--max", max_contacts]
 
@@ -1102,17 +1098,7 @@ def tool_log_insights():
         print()
 
     # ── Time range ────────────────────────────────────────────────────────────
-    time_choice = ask_choice("Time range", ["Relative (e.g. 24h, 7d)", "Date range"], default="Relative (e.g. 24h, 7d)")
-    time_args: list[str] = []
-    if "Date" in time_choice:
-        start = ask_date("Start", ["YYYY-MM-DD", "YYYY-MM-DD HH:MM"])
-        end   = ask_date("End",   ["YYYY-MM-DD", "YYYY-MM-DD HH:MM"], required=False)
-        time_args = ["--start", start]
-        if end:
-            time_args += ["--end", end]
-    else:
-        last = ask("Duration", default="24h")
-        time_args = ["--last", last]
+    time_args = ask_time_window()
 
     # ── Other options ─────────────────────────────────────────────────────────
     region    = ask("Region",     required=False, default=_cfg.get("region", ""))
