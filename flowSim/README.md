@@ -11,6 +11,7 @@ Tools for simulating, replaying, and analyzing Amazon Connect contact flows with
 | `flow_sim.py` | Batch simulator — runs a scenario file through a flow and outputs an HTML visualization of the path taken |
 | `scenario_from_logs.py` | Builds scenario files from real CloudWatch flow logs — extracts Lambda responses, DTMF inputs, and attribute values |
 | `export_flow_logs.py` | Exports Connect CloudWatch flow logs for a time window to a local file (input for `scenario_from_logs.py`) |
+| `replay_contact.py` | One-command replay of a real contact — fetches CW logs, builds a scenario, and runs `flow_sim.py` automatically |
 
 ## Typical Workflow
 
@@ -42,7 +43,18 @@ python scenario_from_logs.py flowSim/Logs/logs_20260501.json --archetypes --inst
 ```bash
 python flow_sim.py --instance-id <UUID> --flow "Main IVR" --scenario flowSim/Scenarios/Premium.json
 ```
-Runs the scenario non-interactively and opens an HTML visualization of the path taken.
+Runs the scenario non-interactively and produces an HTML visualization of the path taken.
+
+### 5. Replay a real contact in one command
+```bash
+python replay_contact.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
+```
+Fetches CloudWatch logs for the contact, builds a scenario from the actual Lambda responses, DTMF choices, and attribute values, then runs `flow_sim.py` automatically.
+
+- Writes scenario to `flowSim/Scenarios/replay_<cid8>.json`
+- Writes HTML to `flowSim/Simulations/replay_<cid8>.html`
+- Requires flow logs within CloudWatch retention (typically 30 days) and the flow cache from step 1
+- IAM: `connect:DescribeContact`, `connect:DescribeInstance`, `logs:FilterLogEvents`
 
 ## Output Directories
 
@@ -53,6 +65,21 @@ Runs the scenario non-interactively and opens an HTML visualization of the path 
 | `flowSim/Simulations/` | HTML path visualizations |
 | `flowSim/Logs/` | Exported CloudWatch log files (input for `scenario_from_logs.py`) |
 | `flowSim/for_review/` | Blocks flagged for review during interactive walks |
+
+## HTML Viewer Controls
+
+The simulation HTML output (`flowSim/Simulations/*.html`) is an interactive graph:
+
+| Control | Action |
+|---|---|
+| Scroll wheel | Zoom in / out |
+| Click + drag | Pan |
+| Click a node | Select and center view |
+| Arrow keys | Step forward / backward through the taken path |
+| `F` key | Fit the full graph to the viewport |
+| *Colors* button | Open color theme picker (4 presets + per-node-type color pickers) |
+
+The taken path is highlighted; nodes not on the path are dimmed.
 
 ## Scenario File Format
 
