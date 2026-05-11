@@ -10,6 +10,7 @@ values as a scenario file ready for flow_sim.py.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import re
 import sys
@@ -89,19 +90,98 @@ class WalkSession:
     flagged:                list       = field(default_factory=list)
 
 
+# ── Step rewind support ───────────────────────────────────────────────────────
+
+class _RewindRequest(Exception):
+    def __init__(self, steps: int = 1):
+        self.steps = steps
+
+
+@dataclass
+class _Snapshot:
+    step_count:              int
+    current_id:              str
+    visited:                 set
+    loop_remaining:          int
+    attributes:              dict
+    external:                dict
+    queue:                   str
+    contact_params:          dict
+    dtmf_inputs:             dict
+    lambda_mocks:            dict
+    hours_mocks:             dict
+    staffing_mocks:          dict
+    lambda_output_templates: dict
+    path:                    list
+    pinned_attrs:            dict
+    flagged:                 list
+
+
+def _take_snap(state: SimState, session: WalkSession,
+               current_id: str, visited: set, loop_remaining: int) -> _Snapshot:
+    return _Snapshot(
+        step_count              = session.step_count,
+        current_id              = current_id,
+        visited                 = set(visited),
+        loop_remaining          = loop_remaining,
+        attributes              = dict(state.attributes),
+        external                = dict(state.external),
+        queue                   = state.queue,
+        contact_params          = dict(state.contact_params),
+        dtmf_inputs             = copy.deepcopy(session.dtmf_inputs),
+        lambda_mocks            = copy.deepcopy(session.lambda_mocks),
+        hours_mocks             = copy.deepcopy(session.hours_mocks),
+        staffing_mocks          = copy.deepcopy(session.staffing_mocks),
+        lambda_output_templates = copy.deepcopy(session.lambda_output_templates),
+        path                    = list(session.path),
+        pinned_attrs            = dict(session.pinned_attrs),
+        flagged                 = list(session.flagged),
+    )
+
+
+def _restore_snap(snap: _Snapshot, state: SimState,
+                  session: WalkSession) -> tuple:
+    """Restore state and session from snap. Returns (current_id, visited, loop_remaining)."""
+    state.attributes             = dict(snap.attributes)
+    state.external               = dict(snap.external)
+    state.queue                  = snap.queue
+    state.contact_params         = dict(snap.contact_params)
+    session.step_count           = snap.step_count
+    session.dtmf_inputs          = copy.deepcopy(snap.dtmf_inputs)
+    session.lambda_mocks         = copy.deepcopy(snap.lambda_mocks)
+    session.hours_mocks          = copy.deepcopy(snap.hours_mocks)
+    session.staffing_mocks       = copy.deepcopy(snap.staffing_mocks)
+    session.lambda_output_templates = copy.deepcopy(snap.lambda_output_templates)
+    session.path                 = list(snap.path)
+    session.pinned_attrs         = dict(snap.pinned_attrs)
+    session.flagged              = list(snap.flagged)
+    return snap.current_id, set(snap.visited), snap.loop_remaining
+
+
+def _parse_back(val: str) -> int:
+    """Parse 'back' or 'back N' → int steps (≥1)."""
+    parts = val.strip().split()
+    if len(parts) > 1 and parts[1].isdigit():
+        return max(1, int(parts[1]))
+    return 1
+
+
 # ── Prompt helpers ────────────────────────────────────────────────────────────
 
-def _ask(label: str, default: str = "") -> str:
+def _ask(label: str, default: str = "", rewind_ok: bool = False) -> str:
     hint = f" [{default}]" if default else ""
     try:
         val = input(f"       {label}{hint}: ").strip()
     except (EOFError, KeyboardInterrupt):
         print()
         return default
+    if rewind_ok and val.lower().startswith("back"):
+        raise _RewindRequest(_parse_back(val))
     return val if val else default
 
 
-def _ask_choice(label: str, options: list[str], default: str = "") -> str:
+def _ask_choice(label: str, options: list[str], default: str = "",
+                rewind_ok: bool = False) -> str:
     opts_str = "/".join(options) if options else "free input"
     hint     = f"[{opts_str}]" + (f" default: {default}" if default else "")
     while True:
@@ -110,6 +190,8 @@ def _ask_choice(label: str, options: list[str], default: str = "") -> str:
         except (EOFError, KeyboardInterrupt):
             print()
             return default or (options[0] if options else "")
+        if rewind_ok and val.lower().startswith("back"):
+            raise _RewindRequest(_parse_back(val))
         if not val and default:
             return default
         if not options or val in options:
@@ -117,13 +199,15 @@ def _ask_choice(label: str, options: list[str], default: str = "") -> str:
         print(f"         Invalid — choose: {opts_str}")
 
 
-def _ask_bool(label: str, default: bool = True) -> bool:
+def _ask_bool(label: str, default: bool = True, rewind_ok: bool = False) -> bool:
     hint = "Y/n" if default else "y/N"
     try:
         val = input(f"       {label} [{hint}]: ").strip().lower()
     except (EOFError, KeyboardInterrupt):
         print()
         return default
+    if rewind_ok and val.startswith("back"):
+        raise _RewindRequest(_parse_back(val))
     if not val:
         return default
     return val in ("y", "yes", "1", "true")
@@ -306,7 +390,7 @@ def _walk_block(
     if btype == "CheckHoursOfOperation":
         hoo_id = params.get("HoursOfOperationId") or ""
         _detail(f"Hours: {hoo_id[:52] or '?'}")
-        in_hours = _ask_bool("In hours?", default=True)
+        in_hours = _ask_bool("In hours?", default=True, rewind_ok=True)
         session.hours_mocks[hoo_id] = {"in_hours": in_hours}
         if in_hours:
             for cond in conditions:
@@ -324,7 +408,7 @@ def _walk_block(
     if btype in ("CheckStaffing", "CheckStaffingStatus"):
         q_id = params.get("QueueId") or ""
         _detail(f"Queue: {q_id[:52] or '?'}")
-        staffed = _ask_bool("Staffed?", default=True)
+        staffed = _ask_bool("Staffed?", default=True, rewind_ok=True)
         session.staffing_mocks[q_id] = {"staffed": staffed}
         if staffed:
             for cond in conditions:
@@ -346,7 +430,7 @@ def _walk_block(
         if queue:
             label += f" (queue: {queue.split('/')[-1]})"
         _detail(f"Metric: {label}")
-        met = _ask_bool("Condition met?", default=True)
+        met = _ask_bool("Condition met?", default=True, rewind_ok=True)
         if met:
             for cond in conditions:
                 c   = cond.get("Condition") or {}
@@ -383,7 +467,7 @@ def _walk_block(
                 if len(cached_attrs) > 3:
                     summary += f" (+{len(cached_attrs) - 3} more)"
             _detail(f"[cached] {summary}")
-            if not _ask_bool("Override cached response?", default=False):
+            if not _ask_bool("Override cached response?", default=False, rewind_ok=True):
                 if cached_result == "Success":
                     for attr_name, attr_val in cached_attrs.items():
                         state.external[attr_name] = attr_val
@@ -413,7 +497,7 @@ def _walk_block(
             template = [a.strip() for a in raw.split(",") if a.strip()] if raw.strip() else []
             session.lambda_output_templates[fn_name] = template
 
-        result = _ask_choice("Result", ["Success", "Error"], default="Success")
+        result = _ask_choice("Result", ["Success", "Error"], default="Success", rewind_ok=True)
         mock: dict = {"result": result, "attributes": {}}
         session.lambda_mocks[fn_name] = mock
 
@@ -460,7 +544,7 @@ def _walk_block(
             for op in ((c.get("Condition") or {}).get("Operands") or [])
             if (c.get("Condition") or {}).get("Operator") == "Equals"
         })
-        val = _ask_choice("DTMF input", valid, default=valid[0] if valid else "")
+        val = _ask_choice("DTMF input", valid, default=valid[0] if valid else "", rewind_ok=True)
         session.dtmf_inputs[f"{flow_name} / {blabel}"] = {"value": val}
         for cond in conditions:
             c   = cond.get("Condition") or {}
@@ -498,10 +582,14 @@ def _walk_flow(
     current_id     = content.get("StartAction", "")
     visited: set[str] = set()
     loop_remaining = 0  # automatic iterations left before asking again
+    _snaps: list[_Snapshot] = []  # per-level snapshot stack for rewind
 
     _divider(flow_name)
 
     while current_id and session.step_count < MAX_STEPS:
+        # Snapshot before loop detection and visited mutation so rewind lands cleanly
+        _snaps.append(_take_snap(state, session, current_id, visited, loop_remaining))
+
         if current_id in visited:
             if loop_remaining > 0:
                 loop_remaining -= 1
@@ -526,51 +614,67 @@ def _walk_flow(
 
         session.step_count += 1
         btype = action.get("Type", "")
-        next_id, is_terminal, transfer_target, action_desc, branch = _walk_block(
-            action, flow_name, content, state, session, session.step_count
-        )
 
-        blabel = _block_label(action)
-        session.path.append(Step(
-            flow_id       = flow_id,
-            flow_name     = flow_name,
-            block_id      = current_id,
-            block_label   = blabel,
-            block_type    = btype,
-            type_label    = TYPE_LABELS.get(btype, btype),
-            action_desc   = action_desc,
-            branch        = branch,
-            next_block_id = next_id,
-            terminal      = is_terminal,
-            is_transfer   = bool(transfer_target),
-            transfer_target = transfer_target,
-        ))
+        try:
+            next_id, is_terminal, transfer_target, action_desc, branch = _walk_block(
+                action, flow_name, content, state, session, session.step_count
+            )
 
-        # Offer flag-for-review at meaningful block types
-        if btype in (DECISION_TYPES | LAMBDA_TYPES | SET_ATTR_TYPES):
-            note = _ask(f"  {_D}Flag for review? (note or Enter to skip){_R}", default="")
-            if note:
-                session.flagged.append({
-                    "step":        session.step_count,
-                    "flow":        flow_name,
-                    "block_id":    current_id,
-                    "block_label": blabel,
-                    "block_type":  btype,
-                    "note":        note,
-                })
+            blabel = _block_label(action)
+            session.path.append(Step(
+                flow_id         = flow_id,
+                flow_name       = flow_name,
+                block_id        = current_id,
+                block_label     = blabel,
+                block_type      = btype,
+                type_label      = TYPE_LABELS.get(btype, btype),
+                action_desc     = action_desc,
+                branch          = branch,
+                next_block_id   = next_id,
+                terminal        = is_terminal,
+                is_transfer     = bool(transfer_target),
+                transfer_target = transfer_target,
+            ))
 
-        if is_terminal:
-            break
+            # Offer flag-for-review at meaningful block types
+            if btype in (DECISION_TYPES | LAMBDA_TYPES | SET_ATTR_TYPES):
+                note = _ask(f"  {_D}Flag for review? (note or Enter to skip){_R}", default="",
+                            rewind_ok=True)
+                if note:
+                    session.flagged.append({
+                        "step":        session.step_count,
+                        "flow":        flow_name,
+                        "block_id":    current_id,
+                        "block_label": blabel,
+                        "block_type":  btype,
+                        "note":        note,
+                    })
 
-        if transfer_target:
-            sub = by_id.get(transfer_target) or find_flow(transfer_target, by_id, by_name)
-            if sub:
-                _walk_flow(sub, state, session, by_id, by_name, depth + 1)
-            else:
-                print(f"\n  {_RD}[Target flow not in cache: {transfer_target}]{_R}")
-            break
+            if is_terminal:
+                break
 
-        current_id = next_id
+            if transfer_target:
+                sub = by_id.get(transfer_target) or find_flow(transfer_target, by_id, by_name)
+                if sub:
+                    _walk_flow(sub, state, session, by_id, by_name, depth + 1)
+                else:
+                    print(f"\n  {_RD}[Target flow not in cache: {transfer_target}]{_R}")
+                break
+
+            current_id = next_id
+
+        except _RewindRequest as rw:
+            available = len(_snaps)
+            if rw.steps > available:
+                # Rewind goes further back than this level — propagate to parent
+                _snaps.clear()
+                raise _RewindRequest(rw.steps - available)
+            # Pop rw.steps snapshots; restore the oldest of those
+            for _ in range(rw.steps - 1):
+                _snaps.pop()
+            snap = _snaps.pop()
+            current_id, visited, loop_remaining = _restore_snap(snap, state, session)
+            print(f"\n  {_YL}↩  Rewound to step {snap.step_count + 1}{_R}\n")
 
 
 # ── Save session as scenario ──────────────────────────────────────────────────
@@ -754,12 +858,14 @@ def walk(
     print(f"\n  {_B}Walking: {actual_name}{_R}")
     print(f"  {_D}ANI:  {state.contact_params.get('ani') or '?'}  "
           f"DNIS: {state.contact_params.get('dnis') or '?'}{_R}")
-    print(f"  {_D}Ctrl+C to stop early{_R}")
+    print(f"  {_D}Ctrl+C to stop early  ·  type 'back' or 'back N' at any prompt to rewind{_R}")
 
     try:
         _walk_flow(start, state, session, by_id, by_name, depth=0)
     except KeyboardInterrupt:
         print(f"\n\n  {_D}Walk interrupted.{_R}")
+    except _RewindRequest:
+        print(f"\n  {_YL}[Can't rewind further — already at the start of the flow]{_R}")
 
     # ── Summary ───────────────────────────────────────────────────────────────
     print(f"\n  {_B}Walk complete — {session.step_count} steps{_R}")
