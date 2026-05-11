@@ -55,11 +55,12 @@ The menu is two levels: pick a **group**, then pick a **tool** within it. Press 
 | 3 | Flow Optimize | `flow_optimize.py` |
 | 4 | Flow Review (AI) | `flow_review.py` |
 | 5 | Flow Usage | `flow_usage.py` |
-| 6 | Flow Compare | `flow_compare.py` |
-| 7 | Flow Promote | `flow_promote.py` |
-| 8 | Orphaned Resources | `orphaned_resources.py` |
-| 9 | Export Flow | `export_flow.py` |
-| 10 | Flow to Chart | `flow_to_chart.py` |
+| 6 | Flow Traffic | `flow_traffic.py` |
+| 7 | Flow Compare | `flow_compare.py` |
+| 8 | Flow Promote | `flow_promote.py` |
+| 9 | Orphaned Resources | `orphaned_resources.py` |
+| 10 | Export Flow | `export_flow.py` |
+| 11 | Flow to Chart | `flow_to_chart.py` |
 
 ### Log Insights
 | # | Tool | Script |
@@ -134,7 +135,9 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 
 **Lambda Errors** — Instance ID, Function name (substring), Region, Time window (last N / start+end / period), Output CSV
 
-**Agent List** — Instance ID, Region, optional username search (substring), optional routing profile filter, Output CSV
+**Flow Traffic** — Instance ID, Region, optional Contact ID (single contact) or Flow name filter, time window (single-contact mode skips this), max contacts, output view (counts + paths / counts only / JSON), optional CSV output
+
+**Agent List** — Instance ID, Region, optional username search (substring), optional routing profile filter, status filter (active / inactive / all), Output CSV
 
 **Routing Profile Audit** — Instance ID, Region, optional name filter, Output CSV
 

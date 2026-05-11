@@ -65,9 +65,12 @@ After each walk, an HTML visualization of the path taken is automatically saved 
 
 When a loop is detected (revisiting a block), the walk pauses and asks how many more iterations to run before stopping.
 
+**Step rewind:**
+
+At any interactive prompt, type `back` to rewind one step or `back N` to rewind N steps. The walker restores full state (attributes, Lambda outputs, queue, session choices) to the snapshot taken before that step, then re-prompts from that point forward. Rewind propagates across sub-flow boundaries.
+
 **Key bindings during prompts:**
-- Type `..` at any prompt to return to the main menu
-- `Ctrl+C` to stop the walk early
+- `Ctrl+C` — stop the walk early
 
 **Options:**
 

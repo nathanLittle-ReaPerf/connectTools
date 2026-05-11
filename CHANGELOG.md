@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-05-11
+- **flow_walk.py** — Step rewind: type `back` or `back N` at any interactive prompt to restore full walker state (SimState + WalkSession) to N steps back. Snapshots taken before each block; rewind propagates across sub-flow boundaries via `_RewindRequest` exception.
+
+## 2026-05-08
+- **agent_list.py** — `--status active|inactive|all` filter; toolbox menu updated with status choice prompt.
+- **Refactor** — Extracted `ask_time_window()` helper in `connectToolbox.py` to DRY up repeated time window prompts across tools.
+- **Docs** — Updated `flowSim/README.md` with `replay_contact.py` workflow and HTML viewer controls.
+
+## 2026-05-07
+- **flow_traffic.py** — New tool: flow entry counts (entries + unique contacts, with re-entries tracked separately) and per-contact ordered flow paths from Connect CloudWatch logs. `--flow` filter, `--no-paths`, `--max`, `--csv`, `--json`, `--output`. Added to Flows group in toolbox.
+- **flow_sim.py** — New tab for each invocation when the same flow is entered more than once during a simulation.
+- **ct_config.py** — Fixed `_maybe_save_log_group` infinite recursion. Added validation to ignore corrupted stored log group values.
+
 ## 2026-05-05
 - **flow_sim.py HTML viewer** — Arrow key navigation: ↑/↓ steps through the left panel and pans the graph to the selected node without changing zoom level. Scroll wheel now zooms toward the viewport center (keeping the selected node centered) rather than the mouse cursor. Click a step or graph node to fit to that node and its immediate neighbors. Fixed Transfer to Flow ARN lookup — `ContactFlowId` in flow parameters is a full ARN; the simulator now strips to the UUID before cache lookup so sub-flow transfers resolve correctly.
 
