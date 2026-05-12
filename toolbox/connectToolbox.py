@@ -942,11 +942,13 @@ def tool_flow_promote():
     while ask_bool("Add another flow?", default=False):
         names.append(ask("Flow name"))
 
-    dry_run    = ask_bool("Dry run (no changes)?",            default=False)
-    publish    = ask_bool("Publish flows after import?",      default=False)
-    refresh    = ask_bool("Refresh snapshots first?",         default=False)
-    skip_unres = ask_bool("Deploy even with unresolved ARNs?", default=False)
-    no_backup  = ask_bool("Skip Prod backup?",                default=False)
+    dry_run = publish = refresh = skip_unres = no_backup = False
+    if ask_bool("Advanced options?", default=False):
+        dry_run    = ask_bool("Dry run (no changes)?",             default=False)
+        publish    = ask_bool("Publish flows after import?",       default=False)
+        refresh    = ask_bool("Refresh snapshots first?",          default=False)
+        skip_unres = ask_bool("Deploy even with unresolved ARNs?", default=False)
+        no_backup  = ask_bool("Skip Prod backup?",                 default=False)
 
     args = ["--dev-instance-id", iid_dev, "--prod-instance-id", iid_prod]
     for n in names:

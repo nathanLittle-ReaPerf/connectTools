@@ -109,7 +109,7 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 
 **Flow Compare** — Left (older) flow JSON file path, Right (newer) flow JSON file path
 
-**Flow Promote** — Dev instance ID / region / profile, Prod instance ID / region / profile, one or more flow names to promote, Dry run (y/n), Publish after import (y/n), Refresh snapshots (y/n), Deploy with unresolved ARNs (y/n), Skip Prod backup (y/n)
+**Flow Promote** — Dev instance ID / region / profile, Prod instance ID / region / profile, one or more flow names to promote, Advanced options (y/n — if yes: dry run, publish after import, refresh snapshots, deploy with unresolved ARNs, skip Prod backup; all default No)
 
 **Orphaned Resources** — Instance ID, Region, Verify Lambda ARNs (y/n), Output CSV
 
