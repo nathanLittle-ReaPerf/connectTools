@@ -53,7 +53,7 @@ python instance_snapshot.py --instance-id <UUID> --json | jq '.queues'
 - ARN resolution: extracts last path segment and looks up by ID
 - Users stored with `username` as display name (full name requires `DescribeUser` — too expensive for bulk fetch)
 - Missing/inaccessible resource types silently skipped (some may not be configured on all instances)
-- `flow_scan.py` automatically loads the snapshot when `--instance-id` is provided to resolve broken reference IDs to human-readable names
+- `flow_analyze.py` automatically loads the snapshot when `--instance-id` is provided to resolve broken reference IDs to human-readable names
 - Stale threshold: 24h (configurable in `ct_snapshot.STALE_THRESHOLD`)
 
 ---
@@ -103,52 +103,37 @@ python flow_attr_search.py --attribute myAttr --instance-id <UUID> --all --json 
 
 ---
 
-### `flow_scan.py` — Flow Error Scanner
+### `flow_analyze.py` — Flow Analyzer
 
-Scan one or all contact flows for configuration issues. Works on local exported JSON files or live instance flows.
+Scan and optimize contact flows in a single pass. Combines hard error detection (broken refs, dead ends, missing handlers) with rule-based best-practice suggestions (UX, reliability, structure, maintainability). Default runs both; use `--scan` or `--optimize` alone to restrict to one pass.
 
 ```bash
-# Scan a local exported file
-python flow_scan.py Main_IVR.json
+# Local file — scan + optimize (default)
+python flow_analyze.py Main_IVR.json
 
-# Scan a single flow by name from the instance
-python flow_scan.py --instance-id <UUID> --name "Main IVR" --region us-east-1
+# Single flow, scan only
+python flow_analyze.py --instance-id <UUID> --name "Main IVR" --scan
 
-# Scan all flows (summary table)
-python flow_scan.py --instance-id <UUID> --all
+# All flows, full analysis with per-block detail
+python flow_analyze.py --instance-id <UUID> --all --detail
 
-# Bulk scan with per-block detail on flows that have issues
-python flow_scan.py --instance-id <UUID> --all --detail
-
-# Filter by flow type
-python flow_scan.py --instance-id <UUID> --all --type CONTACT_FLOW
-
-# JSON output (pipe to jq)
-python flow_scan.py --instance-id <UUID> --all --json | jq '.flows[] | select(.issue_count > 0)'
+# Bulk JSON — flows with scan errors
+python flow_analyze.py --instance-id <UUID> --all --json | jq '.flows[] | select(.scan.issue_count > 0)'
 ```
 
 **APIs used:** `ListContactFlows`, `DescribeContactFlow`
 
 **Required IAM:** `connect:ListContactFlows`, `connect:DescribeContactFlow`
 
-**Issues detected:**
+**Scan findings (`--scan`):** `broken_start` · `broken_target` · `dead_end` · `missing_lambda_arn` (all ERROR); `missing_error_branch` · `missing_default` · `unreachable` · `missing_queue` (all WARN)
 
-| Severity | Kind | Description |
-|---|---|---|
-| ERROR | `broken_start` | StartAction references a block that doesn't exist |
-| ERROR | `broken_target` | Transition (default/error/condition branch) points to a missing block |
-| ERROR | `dead_end` | Non-terminal block with no outgoing transitions — contact gets stuck |
-| ERROR | `missing_lambda_arn` | InvokeLambdaFunction block with empty ARN |
-| WARN | `missing_error_branch` | Lambda/Transfer/InvokeFlow block with no error handler |
-| WARN | `missing_default` | Decision block has conditions but no default (fallback) branch |
-| WARN | `unreachable` | Block never referenced by any other block — dead code |
-| WARN | `missing_queue` | SetQueue block with no queue configured |
+**Optimize suggestions (`--optimize`):** menu depth > 5, GetUserInput with no error handler, transfer without staffing check, no hours-of-operation check, flow > 40 blocks, back-to-back Lambda calls, duplicate prompt text in 3+ blocks
 
 **Key behaviors:**
-- Accepts both the `export_flow.py` envelope format (`{"metadata":..., "content":...}`) and raw flow JSON
-- `--all` bulk mode shows a summary table; add `--detail` for per-block breakdowns on flows with issues
-- `--name` is case-insensitive substring match; exits if multiple flows match
-- `--json` output includes `issue_count`, `errors`, `warnings`, and full `issues` array per flow
+- Accepts `export_flow.py` envelope format and raw flow JSON
+- `--all` shows summary table; add `--detail` for per-block breakdown on flows with findings
+- `--json` output: `scan` and `optimize` keys per flow (only keys for passes that ran)
+- `--csv` writes scan issues (one row per issue)
 
 ---
 
@@ -187,48 +172,50 @@ python lambda_errors.py --instance-id <UUID> --function my-auth-function --json 
 
 ---
 
-### `contact_timeline.py` — Contact Timeline
+### `contact_investigator.py` — Contact Investigator
 
-Chronological event timeline for a single contact. Stitches together contact metadata milestones (from DescribeContact), every flow block execution (from CloudWatch flow logs), Lambda invocations, and optionally Contact Lens transcript turns into a single sorted view.
+Unified contact investigation tool. Consolidates what were formerly `contact_inspect`, `contact_timeline`, `lambda_tracer`, `contact_recordings`, and `contact_logs` into one script. Shared API calls (DescribeContact, CloudWatch log fetch, Contact Lens) are made once and reused across sections.
 
 ```bash
-# Human-readable timeline
-python contact_timeline.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
+# Default: overview + timeline
+python contact_investigator.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
 
-# Include Contact Lens transcript turns
-python contact_timeline.py --instance-id <UUID> --contact-id <UUID> --transcript
+# Full investigation with transcript
+python contact_investigator.py --instance-id <UUID> --contact-id <UUID> --all --transcript
 
-# Raw JSON (pipe to jq)
-python contact_timeline.py --instance-id <UUID> --contact-id <UUID> --json | jq '.events[] | select(.kind=="LAMBDA")'
+# Lambda trace with CloudWatch logs
+python contact_investigator.py --instance-id <UUID> --contact-id <UUID> --lambda --lambda-logs
 
-# Save JSON to file
-python contact_timeline.py --instance-id <UUID> --contact-id <UUID> --output timeline.json
+# Recordings only, 2-hour URLs
+python contact_investigator.py --instance-id <UUID> --contact-id <UUID> --recordings --url-expires 7200
+
+# JSON of all sections
+python contact_investigator.py --instance-id <UUID> --contact-id <UUID> --all --json | jq '.overview.contact.Channel'
+
+# Download raw flow logs
+python contact_investigator.py --instance-id <UUID> --contact-id <UUID> --logs
 ```
 
-**APIs used:** `DescribeContact`, `DescribeInstance`, `DescribeQueue`, `DescribeUser`, `FilterLogEvents` (Connect flow log group), `ListRealtimeContactAnalysisSegmentsV2` (when `--transcript` or JSON output requested)
+**Sections:** `--overview` · `--timeline` · `--lambda` · `--recordings` · `--logs` · `--all`
+Default (no section flags): `--overview --timeline`
 
 **Required IAM:**
-- `connect:DescribeContact`
-- `connect:DescribeInstance`
-- `connect:DescribeQueue`
-- `connect:DescribeUser`
-- `logs:FilterLogEvents` on `/aws/connect/<instance-alias>`
-- `connect:ListRealtimeContactAnalysisSegments` (for `--transcript`)
-
-**Output columns:** `OFFSET` (T+MM:SS from contact start) · `KIND` · `EVENT` · `DETAIL`
-
-**Event kinds:**
-- `CONTACT` (bold) — metadata milestones: initiated, entered queue, agent connected, disconnected
-- `FLOW` — flow block executions: Play prompt, Get input, Check attribute, Set queue, etc.
-- `LAMBDA` (yellow) — Lambda invocations with result (Success/Error) and flow name
-- `LENS` (dim) — Contact Lens transcript turns with speaker role and sentiment; shown with `--transcript`
+- `connect:DescribeContact` (all sections)
+- `connect:GetContactAttributes`, `connect:ListContactReferences` (`--overview`)
+- `connect:DescribeQueue`, `connect:DescribeUser` (`--overview`, `--timeline`)
+- `connect:ListRealtimeContactAnalysisSegmentsV2` (`--overview`, `--timeline` with `--transcript`)
+- `connect:DescribeInstance`, `logs:FilterLogEvents` on `/aws/connect/*` (`--timeline`, `--lambda`, `--logs`)
+- `logs:FilterLogEvents` on `/aws/lambda/*` (`--lambda` with `--lambda-logs`)
+- `connect:ListInstanceStorageConfigs`, `s3:ListBucket`, `s3:GetObject` (`--recordings`)
 
 **Key behaviors:**
-- Timestamps from the flow log message's own `Timestamp` field (preferred) with CW event timestamp as fallback
-- Lens transcript: uses `BeginOffsetMillis` for voice, `AbsoluteTime` for chat
+- `DescribeContact` called once; CloudWatch log events fetched once — both shared across all sections
+- Contact Lens fetched at most once and reused by both `--overview` and `--timeline`
+- `--lambda` shows invocation metadata and Connect-side responses; add `--lambda-logs` to also fetch each function's CW logs (±30s window)
+- `--recordings` reads `ListInstanceStorageConfigs` — no hardcoded bucket names
+- `--logs` writes raw CW events to `~/.connecttools/ContactInvestigator/<contact-id>_logs.json`; in `--json` mode events are included inline
 - Log group auto-discovered from instance alias; override with `--log-group`
-- Contact Lens only fetched when `--transcript`, `--json`, or `--output` is passed
-- If no flow logs found, timeline shows contact milestones only with a warning
+- `--json` aggregates all requested sections into a single document: keys present only for sections that ran
 
 ---
 
@@ -266,77 +253,6 @@ python contact_diff.py --instance-id <UUID> --contact-id-a <UUID> --contact-id-b
 - Attribute keys missing from one side display as `[absent]` (dimmed)
 - `--json` output includes full raw contact data plus a `diff` block with per-field match flags for all three sections
 - Both contact IDs must belong to the same instance
-
----
-
-### `contact_inspect.py` — Contact Deep Dive
-
-Pull all available data for a single contact ID: core metadata, custom attributes, references, Contact Lens transcript/sentiment/issues, and transfer chain.
-
-```bash
-# Human-readable
-python contact_inspect.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
-
-# Include full transcript turns
-python contact_inspect.py --instance-id <UUID> --contact-id <UUID> --transcript
-
-# Raw JSON (pipe to jq)
-python contact_inspect.py --instance-id <UUID> --contact-id <UUID> --json | jq '.contact.Channel'
-
-# With a named AWS profile (local dev)
-python contact_inspect.py --instance-id <UUID> --contact-id <UUID> --profile my-admin
-```
-
-**APIs used:** `DescribeContact`, `GetContactAttributes`, `ListContactReferences`, `ListRealtimeContactAnalysisSegments` (voice) / `ListRealtimeContactAnalysisSegmentsV2` (chat)
-
-**Required IAM:**
-- `connect:DescribeContact`
-- `connect:GetContactAttributes`
-- `connect:ListContactReferences`
-- `connect:ListRealtimeContactAnalysisSegments`
-
-**Key behaviors:**
-- Contact Lens data has a 24-hour retention window — detects expired contacts and explains why rather than returning silently empty
-- Walks `PreviousContactId` to reconstruct the full transfer chain automatically
-- Channel-aware: uses the correct Contact Lens API for VOICE vs. CHAT/EMAIL
-- All API failures degrade gracefully (missing sections are noted, not crashes)
-- `--json` merges all API responses into a single document
-
----
-
-### `lambda_tracer.py` — Trace Lambda Invocations
-
-Trace every Lambda function invoked during a contact's flow execution. Pulls Connect flow-execution logs to find Lambda invocations, then fetches the actual Lambda CloudWatch logs around each invocation timestamp.
-
-```bash
-# Human-readable trace with full Lambda logs
-python lambda_tracer.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
-
-# Show invocation metadata only (skip Lambda logs)
-python lambda_tracer.py --instance-id <UUID> --contact-id <UUID> --summary
-
-# Raw JSON output
-python lambda_tracer.py --instance-id <UUID> --contact-id <UUID> --json
-
-# Save to file
-python lambda_tracer.py --instance-id <UUID> --contact-id <UUID> --output trace.json
-```
-
-**APIs used:** `DescribeContact`, `DescribeInstance`, `FilterLogEvents` (Connect flow logs and Lambda log groups)
-
-**Required IAM:**
-- `connect:DescribeContact`
-- `connect:DescribeInstance`
-- `logs:FilterLogEvents` on Connect log group (`/aws/connect/<instance-alias>`)
-- `logs:FilterLogEvents` on each `/aws/lambda/<function-name>` log group
-
-**Key behaviors:**
-- `--summary` mode displays invocation metadata (ARN, timestamp, duration, response) without fetching Lambda logs — useful for quick overview
-- After `--summary` output, user can enter an invocation number to drill down and fetch full logs on demand
-- Lambda logs are fetched within ±30 seconds of the Connect-reported invocation timestamp
-- High-concurrency Lambda functions may have unrelated log lines in the ±30s window; all are shown
-- Log group is auto-discovered from instance alias (case-sensitive); override with `--log-group` if needed
-- All API failures degrade gracefully (missing sections are noted, not crashes)
 
 ---
 
@@ -513,40 +429,6 @@ python contacts_handled.py --instance-arn <ARN> --region us-east-1
 - botocore retry config with exponential backoff (max 10 attempts)
 
 ---
-
-### `contact_recordings.py` — Contact Recordings & Transcripts
-
-Locate the S3 paths and generate presigned download URLs for a contact's recordings and transcripts — original and redacted — for both voice and chat.
-
-```bash
-# Human-readable
-python contact_recordings.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
-
-# Extend presigned URL expiry to 2 hours
-python contact_recordings.py --instance-id <UUID> --contact-id <UUID> --url-expires 7200
-
-# Raw JSON (pipe to jq)
-python contact_recordings.py --instance-id <UUID> --contact-id <UUID> --json | jq '.artifacts'
-```
-
-**APIs used:** `DescribeContact`, `ListInstanceStorageConfigs`, `s3:ListObjectsV2`, `s3:GeneratePresignedUrl`
-
-**Required IAM:**
-- `connect:DescribeContact`
-- `connect:ListInstanceStorageConfigs`
-- `s3:ListBucket` on the recordings/transcripts bucket(s)
-- `s3:GetObject` on the recordings/transcripts bucket(s)
-
-**What it finds (VOICE):** recording (original + redacted), Contact Lens analysis (original + redacted)
-
-**What it finds (CHAT):** chat transcript (original + redacted), Contact Lens analysis (original + redacted)
-
-**Key behaviors:**
-- Reads `ListInstanceStorageConfigs` for `CALL_RECORDINGS` and `CHAT_TRANSCRIPTS` — adapts to your instance's bucket names and prefixes automatically; no hardcoded bucket names
-- Searches S3 under the contact's date prefix (`YYYY/MM/DD`) and filters by contact ID in the key name
-- Classifies files as original vs. redacted by checking for `_redacted` in the filename or `/Redacted/` in the path
-- Presigned URLs default to 1-hour expiry; override with `--url-expires <seconds>`
-- `--json` output groups all results under `artifacts.recordings`, `artifacts.analysis`, and `artifacts.transcripts`
 
 ## Architecture
 

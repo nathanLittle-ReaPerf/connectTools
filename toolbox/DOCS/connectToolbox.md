@@ -36,24 +36,19 @@ The menu is two levels: pick a **group**, then pick a **tool** within it. Press 
 ### Contacts
 | # | Tool | Script |
 |---|---|---|
-| 1 | Contacts Handled | `contacts_handled.py` |
-| 2 | Contact Inspect | `contact_inspect.py` |
-| 3 | Contact Timeline | `contact_timeline.py` |
-| 4 | Log Viewer (TUI) | `log_viewer.py` |
-| 5 | Contact Diff | `contact_diff.py` |
-| 6 | Contact Search | `contact_search.py` |
-| 7 | Contact Recordings | `contact_recordings.py` |
-| 8 | Contact Logs | `contact_logs.py` |
-| 9 | Lambda Tracer | `lambda_tracer.py` |
-| 10 | Lambda Errors | `lambda_errors.py` |
+| 1 | Contact Investigator | `contact_investigator.py` |
+| 2 | Contacts Handled | `contacts_handled.py` |
+| 3 | Log Viewer (TUI) | `log_viewer.py` |
+| 4 | Contact Diff | `contact_diff.py` |
+| 5 | Contact Search | `contact_search.py` |
+| 6 | Lambda Errors | `lambda_errors.py` |
 
 ### Flows
 | # | Tool | Script |
 |---|---|---|
-| 1 | Flow Scan | `flow_scan.py` |
+| 1 | Flow Analyze | `flow_analyze.py` |
 | 2 | Flow Attr Search | `flow_attr_search.py` |
-| 3 | Flow Optimize | `flow_optimize.py` |
-| 4 | Flow Review (AI) | `flow_review.py` |
+| 3 | Flow Review (AI) | `flow_review.py` |
 | 5 | Flow Usage | `flow_usage.py` |
 | 6 | Flow Traffic | `flow_traffic.py` |
 | 7 | Flow Compare | `flow_compare.py` |
@@ -88,19 +83,15 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 
 ## Per-tool prompts
 
-**Contacts Handled** — Instance ID, Month (YYYY-MM), Region, Timezone
+**Contact Investigator** — Instance ID, Contact ID, Region, Sections (overview+timeline / all / custom), Log group (optional), Include transcript (y/n), Fetch Lambda logs (y/n, if lambda section), URL expiry (if recordings section), Save JSON to file or print
 
-**Contact Inspect** — Instance ID, Contact ID, Region, Include transcript (y/n)
+**Contacts Handled** — Instance ID, Month (YYYY-MM), Region, Timezone
 
 **Contact Search** — Instance ID, Start date, End date, Region, optional filters (channel, initiation method, queue ID, contact attribute), max contacts, output file
 
-**Contact Recordings** — Instance ID, Contact ID, Region, URL expiry (seconds, default 3600)
-
-**Flow Scan** — Instance ID, Region, Flow name (or blank for all), Flow type filter, Show per-block detail (y/n), Output CSV
+**Flow Analyze** — Source (local file / instance flow / all flows), then flow path or Instance ID + name/type filter, Analysis mode (scan+optimize / scan only / optimize only), Show per-block detail (y/n, all-flows mode), Output CSV for scan issues
 
 **Flow Attr Search** — Attribute name, Source (local file(s) / instance flow / all flows), then path(s) or Instance ID + name/type filter, Exact case match (y/n), Output format (text / json), Show per-block detail (y/n, text mode only), Save to file
-
-**Flow Optimize** — Source (local file / instance flow / all flows), then flow path or Instance ID + name/type filter
 
 **Flow Review (AI)** — Flow JSON file path, Model (default: claude-opus-4-6). Requires `ANTHROPIC_API_KEY`.
 
@@ -123,15 +114,9 @@ After selecting a tool, the menu prompts for each argument one at a time. Option
 
 **Agent Contacts** — Instance ID, Region, Month (YYYY-MM, default previous month), Timezone (default UTC), Output CSV
 
-**Contact Timeline** — Instance ID, Contact ID, Region, Include transcript (y/n)
-
 **Log Viewer (TUI)** — Instance ID, Contact ID (optional — can be entered in the TUI via [n]), Log group (optional), Region
 
 **Contact Diff** — Instance ID, Contact ID A, Contact ID B, Region, Show all attributes (y/n)
-
-**Contact Logs** — Instance ID, Contact ID, Region, Output file
-
-**Lambda Tracer** — Instance ID, Contact ID, Region, Summary only (y/n), Output file
 
 **Lambda Errors** — Instance ID, Function name (substring), Region, Time window (last N / start+end / period), Output CSV
 

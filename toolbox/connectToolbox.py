@@ -423,9 +423,12 @@ CONTACTS_HANDLED_QUESTIONS = [
     {"label": "Timezone", "arg": "--timezone", "required": False},
 ]
 
-CONTACT_INSPECT_QUESTIONS = [
-    {"label": "Contact ID", "arg": "--contact-id", "required": True},
-    {"label": "Include full transcript?", "arg": "--transcript", "type": "bool"},
+CONTACT_INVESTIGATOR_SECTIONS = [
+    ("overview",   "Overview (metadata, attributes, transfer chain, Lens summary)"),
+    ("timeline",   "Timeline (chronological flow blocks, Lambda calls, milestones)"),
+    ("lambda",     "Lambda trace (invocation metadata + Connect responses)"),
+    ("recordings", "Recordings (S3 paths + presigned download URLs)"),
+    ("logs",       "Raw logs download (save CloudWatch flow logs to file)"),
 ]
 
 _LAMBDA_ERRORS_PERIODS = ["today", "yesterday", "this-week", "last-week",
@@ -462,28 +465,12 @@ def tool_lambda_errors():
 
     _run("lambda_errors.py", args)
 
-CONTACT_TIMELINE_QUESTIONS = [
-    {"label": "Contact ID", "arg": "--contact-id", "required": True},
-    {"label": "Include transcript turns?", "arg": "--transcript", "type": "bool"},
-    {"label": "Log group (leave blank to auto-discover)", "arg": "--log-group", "required": False},
-]
-
 CONTACT_DIFF_QUESTIONS = [
     {"label": "Contact ID A", "arg": "--contact-id-a", "required": True},
     {"label": "Contact ID B", "arg": "--contact-id-b", "required": True},
     {"label": "Show all attributes (not just differing)?", "arg": "--all-attrs", "type": "bool"},
 ]
 
-CONTACT_RECORDINGS_QUESTIONS = [
-    {"label": "Contact ID", "arg": "--contact-id", "required": True},
-    {"label": "URL expiry (secs)", "arg": "--url-expires", "required": False, "default": "3600"},
-]
-
-FLOW_SCAN_QUESTIONS = [
-    {"label": "Flow name (leave blank to scan all)", "arg": "--name", "required": False},
-    {"label": "Flow type filter (e.g. CONTACT_FLOW, leave blank for all)", "arg": "--type", "required": False},
-    {"label": "Show per-block detail in bulk mode?", "arg": "--detail", "type": "bool"},
-]
 
 FLOW_TO_CHART_QUESTIONS = [
     {"label": "Flow JSON file path", "arg": None, "standalone": True, "required": True},
@@ -544,9 +531,6 @@ def tool_runner(tool_name: str, script_name: str, questions: list, connect_tool:
                 if isinstance(val, bool):
                     args.append(arg_name)
                 else:
-                    # For some cases, the value of the argument is not what we want to pass to the script
-                    # For example, in tool_contact_logs, the format can be "json" or "text"
-                    # but we only want to pass "--text" if the format is "text"
                     if "val_map" in q and str(val) in q["val_map"]:
                         mapped_val = q["val_map"][str(val)]
                         if mapped_val: # mapped_val can be None if we don't want to add any argument
@@ -564,18 +548,60 @@ def tool_contacts_handled():
     tool_runner("Contacts Handled", "contacts_handled.py", CONTACTS_HANDLED_QUESTIONS)
 
 
-# ── Tool: Contact Inspect ─────────────────────────────────────────────────────
+# ── Tool: Contact Investigator ────────────────────────────────────────────────
 
+def tool_contact_investigator():
+    _header("Contact Investigator")
+    iid, region, profile = ask_connect_defaults()
+    cid = ask("Contact ID")
 
-def tool_contact_inspect():
-    tool_runner("Contact Inspect", "contact_inspect.py", CONTACT_INSPECT_QUESTIONS)
+    section_choice = ask_choice(
+        "Sections to run",
+        ["overview + timeline (default)", "all sections", "custom"],
+        default="overview + timeline (default)",
+    )
 
+    sections: list[str] = []
+    if section_choice == "overview + timeline (default)":
+        sections = ["overview", "timeline"]
+    elif section_choice == "all sections":
+        sections = ["overview", "timeline", "lambda", "recordings", "logs"]
+    else:
+        for key, label in CONTACT_INVESTIGATOR_SECTIONS:
+            if ask_bool(f"Include {label}?", default=(key in ("overview", "timeline"))):
+                sections.append(key)
 
-# ── Tool: Contact Timeline ────────────────────────────────────────────────────
+    args = connect_args(iid, region, profile) + ["--contact-id", cid]
+    for sec in sections:
+        args.append(f"--{sec}" if sec != "lambda" else "--lambda")
 
+    log_group = ask("Log group (leave blank to auto-discover)", required=False,
+                    default=ct_config.get_log_group(iid))
+    if log_group:
+        _maybe_save_log_group(iid, log_group)
+        args += ["--log-group", log_group]
 
-def tool_contact_timeline():
-    tool_runner("Contact Timeline", "contact_timeline.py", CONTACT_TIMELINE_QUESTIONS)
+    if "overview" in sections or "timeline" in sections:
+        if ask_bool("Include Contact Lens transcript turns?"):
+            args.append("--transcript")
+
+    if "lambda" in sections:
+        if ask_bool("Fetch Lambda CloudWatch logs? (slower — ±30s window per invocation)"):
+            args.append("--lambda-logs")
+
+    if "recordings" in sections:
+        url_expires = ask("URL expiry in seconds", required=False, default="3600")
+        if url_expires and url_expires != "3600":
+            args += ["--url-expires", url_expires]
+
+    output = ask("Save JSON to file (leave blank to print to terminal)", required=False)
+    if output:
+        args += ["--output", output]
+    else:
+        if ask_bool("Print JSON instead of human-readable output?"):
+            args.append("--json")
+
+    _run("contact_investigator.py", args)
 
 
 def _maybe_save_log_group(iid: str, log_group: str) -> None:
@@ -664,77 +690,47 @@ def tool_contact_search():
 VALID_CHANNELS_CS = ["VOICE", "CHAT", "TASK", "EMAIL"]
 
 
-# ── Tool: Contact Logs ────────────────────────────────────────────────────────
+# ── Tool: Flow Analyze ───────────────────────────────────────────────────────
 
-def tool_contact_logs():
-    _header("Contact Logs")
+def tool_flow_analyze():
+    _header("Flow Analyze")
+    source = ask_choice("Source", ["Local file", "Instance flow", "All flows"], default="Local file")
+
+    if source == "Local file":
+        path = ask("Flow JSON file path")
+        mode = ask_choice("Analysis mode", ["scan + optimize", "scan only", "optimize only"],
+                          default="scan + optimize")
+        args = [path]
+        if mode == "scan only":     args.append("--scan")
+        if mode == "optimize only": args.append("--optimize")
+        _run("flow_analyze.py", args)
+        return
+
     iid, region, profile = ask_connect_defaults()
-    cid       = ask("Contact ID")
-    log_group = ask("Log group", required=False, default=ct_config.get_log_group(iid))
-    fmt       = ask_choice("Output format", ["json", "text"], default="json")
-    output    = ask("Output file", required=False,
-                    default=_out("contact_logs", cid, fmt))
-
-    _maybe_save_log_group(iid, log_group)
-
-    args = connect_args(iid, region, profile) + ["--contact-id", cid]
-    if log_group: args += ["--log-group", log_group]
-    if fmt == "text": args += ["--text"]
-    if output:        args += ["--output", output]
-
-    _run("contact_logs.py", args)
-
-
-# ── Tool: Lambda Tracer ───────────────────────────────────────────────────────
-
-def tool_lambda_tracer():
-    _header("Lambda Tracer")
-    iid, region, profile = ask_connect_defaults()
-    cid       = ask("Contact ID")
-    log_group = ask("Log group", required=False, default=ct_config.get_log_group(iid))
-    output    = ask("Output file", required=False,
-                    default=_out("lambda_tracer", cid, "json"))
-
-    _maybe_save_log_group(iid, log_group)
-
-    summary = not ask_bool("Show full Lambda log lines?", default=True)
-
-    args = connect_args(iid, region, profile) + ["--contact-id", cid]
-    if log_group: args += ["--log-group", log_group]
-    if output:    args += ["--output",    output]
-    if summary:   args += ["--summary"]
-
-    _run("lambda_tracer.py", args)
-
-
-# ── Tool: Contact Recordings ─────────────────────────────────────────────────
-
-
-def tool_contact_recordings():
-    tool_runner("Contact Recordings", "contact_recordings.py", CONTACT_RECORDINGS_QUESTIONS)
-
-
-# ── Tool: Flow Scan ───────────────────────────────────────────────────────────
-
-def tool_flow_scan():
-    _header("Flow Scan")
-    iid, region, profile = ask_connect_defaults()
-    name   = ask("Flow name (leave blank to scan all)", required=False)
-    ftype  = ask("Flow type filter (e.g. CONTACT_FLOW, leave blank for all)", required=False)
-    detail = ask_bool("Show per-block detail?") if not name else False
-    output = ask("CSV output file", required=False,
-                 default=_out("flow_scan", _today(), "csv"))
-
     args = connect_args(iid, region, profile)
-    if name:
+
+    if source == "Instance flow":
+        name = ask("Flow name")
         args += ["--name", name]
     else:
+        ftype = ask("Flow type filter (e.g. CONTACT_FLOW, leave blank for all)", required=False)
         args += ["--all"]
-    if ftype:  args += ["--type",   ftype]
-    if detail: args += ["--detail"]
-    if output: args += ["--csv",    output]
+        if ftype: args += ["--type", ftype]
+        if source == "All flows":
+            if ask_bool("Show per-block detail for flows with findings?"):
+                args.append("--detail")
 
-    _run("flow_scan.py", args)
+    mode = ask_choice("Analysis mode", ["scan + optimize", "scan only", "optimize only"],
+                      default="scan + optimize")
+    if mode == "scan only":     args.append("--scan")
+    if mode == "optimize only": args.append("--optimize")
+
+    if "scan" in mode:
+        output = ask("CSV output file for scan issues", required=False,
+                     default=_out("flow_analyze", _today(), "csv"))
+        if output: args += ["--csv", output]
+
+    _run("flow_analyze.py", args)
 
 
 # ── Tool: Export Flow ─────────────────────────────────────────────────────────
@@ -876,31 +872,6 @@ def tool_flow_traffic():
             args += ["--csv", csv_out]
 
     _run("flow_traffic.py", args)
-
-
-# ── Tool: Flow Optimize ───────────────────────────────────────────────────────
-
-def tool_flow_optimize():
-    _header("Flow Optimize")
-    source = ask_choice("Source", ["Local file", "Instance flow", "All flows"], default="Local file")
-
-    if source == "Local file":
-        path = ask("Flow JSON file path")
-        _run("flow_optimize.py", [path])
-        return
-
-    iid, region, profile = ask_connect_defaults()
-    args = connect_args(iid, region, profile)
-
-    if source == "Instance flow":
-        name = ask("Flow name")
-        args += ["--name", name]
-    else:
-        ftype = ask("Flow type filter (e.g. CONTACT_FLOW, leave blank for all)", required=False)
-        args += ["--all"]
-        if ftype: args += ["--type", ftype]
-
-    _run("flow_optimize.py", args)
 
 
 # ── Tool: Flow Review (AI) ────────────────────────────────────────────────────
@@ -1362,21 +1333,16 @@ def tool_settings():
 # Each tool entry: (display_name, runner_fn, tooltip)
 GROUPS = [
     ("Contacts", [
+        ("Contact Investigator", tool_contact_investigator, "Unified investigation: overview, timeline, Lambda trace, recordings, logs"),
         ("Contacts Handled",   tool_contacts_handled,  "Sum CONTACTS_HANDLED across all queues for a month"),
-        ("Contact Inspect",    tool_contact_inspect,   "Full deep-dive: attributes, Lens analysis, transfer chain"),
-        ("Contact Timeline",   tool_contact_timeline,  "Chronological flow blocks, Lambda calls, and contact milestones"),
         ("Log Viewer (TUI)",   tool_log_viewer,        "Interactive scrollable timeline: flow blocks, Lambda logs, milestones"),
         ("Contact Diff",       tool_contact_diff,      "Side-by-side diff of two contacts: core fields, attributes, and Lens"),
         ("Contact Search",     tool_contact_search,    "Search contacts by date, channel, agent, queue, or attribute"),
-        ("Contact Recordings", tool_contact_recordings,"S3 locations and presigned URLs for recordings and transcripts"),
-        ("Contact Logs",       tool_contact_logs,      "Download CloudWatch flow-execution logs for a contact ID"),
-        ("Lambda Tracer",      tool_lambda_tracer,     "Trace Lambda invocations and fetch execution logs for a contact"),
         ("Lambda Errors",      tool_lambda_errors,     "Aggregate Lambda errors across all contacts for a function and time window"),
     ]),
     ("Flows", [
-        ("Flow Scan",             tool_flow_scan,             "Scan flows for broken references, dead ends, missing error handlers"),
+        ("Flow Analyze",          tool_flow_analyze,          "Scan for errors + optimization suggestions (or either alone)"),
         ("Flow Attr Search",      tool_flow_attr_search,      "Find every SET, CHECK, and REF of a contact attribute across flows"),
-        ("Flow Optimize",         tool_flow_optimize,         "Rule-based UX, reliability, and maintainability suggestions"),
         ("Flow Review (AI)",      tool_flow_review,           "AI-powered deep analysis: UX, reliability, structure, and best practices (requires API key)"),
         ("Flow Usage",            tool_flow_usage,            "Count how many contacts or invocations hit each flow over a time window"),
         ("Flow Traffic",          tool_flow_traffic,          "Flow entry counts and per-contact flow paths from CloudWatch logs"),
