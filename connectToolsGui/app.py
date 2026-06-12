@@ -1866,7 +1866,11 @@ def page_flow_replay(active_name: str, active_meta: dict):
         sims_dir = FLOWSIM_DIR / "Simulations"
         png_path = sims_dir / f"replay_{cid8}.png"
 
+        st.write(f"DEBUG: sims_dir = {sims_dir}")
+        st.write(f"DEBUG: png_path = {png_path}")
+
         if st.button("📸 Generate PNG"):
+            st.write("DEBUG: Button clicked!")
             print(f"[UI] PNG button clicked for {cid8}", file=sys.stderr)
             with st.spinner("Rendering PNG..."):
                 print(f"[UI] Calling html_to_png...", file=sys.stderr)
