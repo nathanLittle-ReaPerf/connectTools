@@ -127,65 +127,94 @@ def set_last_profile(profile_name: str):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def html_to_png(html_content: str, png_path: Path, tab_selector: str = None) -> bool:
+    import sys
+    print(f"[PNG] Starting PNG generation for {png_path}", file=sys.stderr)
+
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
+        print("[PNG] ERROR: Playwright not installed", file=sys.stderr)
         return False
 
     try:
+        print(f"[PNG] Launching Playwright browser...", file=sys.stderr)
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
+            print(f"[PNG] Browser launched, creating page...", file=sys.stderr)
             page = browser.new_page(viewport={"width": 1400, "height": 900})
+
+            print(f"[PNG] Setting HTML content ({len(html_content)} bytes)...", file=sys.stderr)
             page.set_content(html_content)
 
             # Wait for networkidle, then give Cytoscape time to render
+            print(f"[PNG] Waiting for networkidle...", file=sys.stderr)
             try:
                 page.wait_for_load_state("networkidle", timeout=10000)
-            except:
-                pass  # Continue even if timeout
+                print(f"[PNG] Networkidle achieved", file=sys.stderr)
+            except Exception as e:
+                print(f"[PNG] Networkidle timeout (continuing): {e}", file=sys.stderr)
 
-            page.wait_for_timeout(2000)  # Extra time for JS rendering
+            print(f"[PNG] Waiting 2s for JS rendering...", file=sys.stderr)
+            page.wait_for_timeout(2000)
 
             # Click tab if selector provided
             if tab_selector:
+                print(f"[PNG] Clicking tab: {tab_selector}", file=sys.stderr)
                 page.click(tab_selector)
                 page.wait_for_timeout(500)
 
+            print(f"[PNG] Taking screenshot to {png_path}...", file=sys.stderr)
             page.screenshot(path=str(png_path), full_page=True)
+            print(f"[PNG] Screenshot saved, closing browser", file=sys.stderr)
             browser.close()
+
+        print(f"[PNG] SUCCESS: {png_path} created ({png_path.stat().st_size} bytes)", file=sys.stderr)
         return True
     except Exception as e:
-        import sys
-        print(f"PNG generation error: {e}", file=sys.stderr)
+        print(f"[PNG] FAILED: {type(e).__name__}: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         return False
 
 
 def html_export_all_tabs(html_content: str, zip_path: Path) -> bool:
+    import sys
+    print(f"[ZIP] Starting tab export to {zip_path}", file=sys.stderr)
+
     try:
         from playwright.sync_api import sync_playwright
         import zipfile
-    except ImportError:
+        print(f"[ZIP] Imports OK", file=sys.stderr)
+    except ImportError as e:
+        print(f"[ZIP] ERROR: Import failed: {e}", file=sys.stderr)
         return False
 
     try:
+        print(f"[ZIP] Launching Playwright...", file=sys.stderr)
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(viewport={"width": 1400, "height": 900})
+            print(f"[ZIP] Browser ready, setting content...", file=sys.stderr)
             page.set_content(html_content)
 
             # Wait for networkidle, then give Cytoscape time to render
+            print(f"[ZIP] Waiting for networkidle...", file=sys.stderr)
             try:
                 page.wait_for_load_state("networkidle", timeout=10000)
-            except:
-                pass
+                print(f"[ZIP] Networkidle achieved", file=sys.stderr)
+            except Exception as e:
+                print(f"[ZIP] Networkidle timeout (continuing): {e}", file=sys.stderr)
 
             page.wait_for_timeout(2000)
 
             # Find all tab buttons (Cytoscape.js uses data-tab or similar)
+            print(f"[ZIP] Looking for tabs...", file=sys.stderr)
             tabs = page.query_selector_all("button[data-tab], .tab-button, [role='tab']")
+            print(f"[ZIP] Found {len(tabs)} tabs", file=sys.stderr)
 
             # If no tabs found, just export the whole page
             if not tabs:
+                print(f"[ZIP] No tabs found, exporting full page", file=sys.stderr)
                 temp_png = zip_path.parent / f"_temp_full.png"
                 page.screenshot(path=str(temp_png), full_page=True)
 
@@ -193,25 +222,32 @@ def html_export_all_tabs(html_content: str, zip_path: Path) -> bool:
                     zf.write(str(temp_png), "flow_diagram.png")
                 temp_png.unlink()
                 browser.close()
+                print(f"[ZIP] SUCCESS: Single image zipped", file=sys.stderr)
                 return True
 
             # Export each tab
+            print(f"[ZIP] Exporting {len(tabs)} tabs to ZIP", file=sys.stderr)
             with zipfile.ZipFile(str(zip_path), 'w') as zf:
                 for i, tab in enumerate(tabs):
-                    tab.click()
-                    page.wait_for_timeout(1000)  # Longer wait for tab switch
-
                     tab_name = tab.text_content().strip() or f"flow_{i}"
+                    print(f"[ZIP] Tab {i}: clicking '{tab_name}'", file=sys.stderr)
+                    tab.click()
+                    page.wait_for_timeout(1000)
+
                     temp_png = zip_path.parent / f"_temp_tab_{i}.png"
+                    print(f"[ZIP] Tab {i}: screenshotting...", file=sys.stderr)
                     page.screenshot(path=str(temp_png), full_page=True)
                     zf.write(str(temp_png), f"{tab_name}.png")
                     temp_png.unlink()
+                    print(f"[ZIP] Tab {i}: added to ZIP", file=sys.stderr)
 
             browser.close()
+            print(f"[ZIP] SUCCESS: ZIP created with {len(tabs)} images", file=sys.stderr)
         return True
     except Exception as e:
-        import sys
-        print(f"Tab export error: {e}", file=sys.stderr)
+        print(f"[ZIP] FAILED: {type(e).__name__}: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         return False
 
 
@@ -1833,13 +1869,19 @@ def page_flow_replay(active_name: str, active_meta: dict):
         png_path = sims_dir / f"replay_{cid8}.png"
 
         if st.button("📸 Generate PNG"):
+            import sys
+            print(f"[UI] PNG button clicked for {cid8}", file=sys.stderr)
             with st.spinner("Rendering PNG..."):
-                if html_to_png(html_content, png_path):
+                print(f"[UI] Calling html_to_png...", file=sys.stderr)
+                result = html_to_png(html_content, png_path)
+                print(f"[UI] html_to_png returned: {result}", file=sys.stderr)
+                if result:
                     st.success("PNG generated!")
                 else:
-                    st.error("Failed to generate PNG. Is Playwright installed? Try: pip install playwright && playwright install")
+                    st.error("Failed to generate PNG. Check server console for details.")
 
         if png_path.exists():
+            print(f"[UI] PNG exists: {png_path}", file=sys.stderr)
             png_data = png_path.read_bytes()
             st.download_button(
                 "💾 Save PNG",
@@ -1848,18 +1890,26 @@ def page_flow_replay(active_name: str, active_meta: dict):
                 mime="image/png",
                 key=f"download_png_{cid8}",
             )
+        else:
+            print(f"[UI] PNG does not exist: {png_path}", file=sys.stderr)
 
     with col3:
         zip_path = sims_dir / f"replay_{cid8}_all_flows.zip"
 
         if st.button("📦 Export All Tabs"):
+            import sys
+            print(f"[UI] ZIP button clicked for {cid8}", file=sys.stderr)
             with st.spinner("Rendering all tabs..."):
-                if html_export_all_tabs(html_content, zip_path):
+                print(f"[UI] Calling html_export_all_tabs...", file=sys.stderr)
+                result = html_export_all_tabs(html_content, zip_path)
+                print(f"[UI] html_export_all_tabs returned: {result}", file=sys.stderr)
+                if result:
                     st.success("All tabs exported!")
                 else:
-                    st.error("Failed to export tabs. Is Playwright installed? Try: pip install playwright && playwright install")
+                    st.error("Failed to export tabs. Check server console for details.")
 
         if zip_path.exists():
+            print(f"[UI] ZIP exists: {zip_path}", file=sys.stderr)
             zip_data = zip_path.read_bytes()
             st.download_button(
                 "💾 Save ZIP",
@@ -1868,6 +1918,8 @@ def page_flow_replay(active_name: str, active_meta: dict):
                 mime="application/zip",
                 key=f"download_zip_{cid8}",
             )
+        else:
+            print(f"[UI] ZIP does not exist: {zip_path}", file=sys.stderr)
 
     # Quick links
     lc1, lc2 = st.columns(2)
