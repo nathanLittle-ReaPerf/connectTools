@@ -127,7 +127,6 @@ def set_last_profile(profile_name: str):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def html_to_png(html_content: str, png_path: Path, tab_selector: str = None) -> bool:
-    import sys
     print(f"[PNG] Starting PNG generation for {png_path}", file=sys.stderr)
 
     try:
@@ -178,7 +177,6 @@ def html_to_png(html_content: str, png_path: Path, tab_selector: str = None) -> 
 
 
 def html_export_all_tabs(html_content: str, zip_path: Path) -> bool:
-    import sys
     print(f"[ZIP] Starting tab export to {zip_path}", file=sys.stderr)
 
     try:
@@ -1869,7 +1867,6 @@ def page_flow_replay(active_name: str, active_meta: dict):
         png_path = sims_dir / f"replay_{cid8}.png"
 
         if st.button("📸 Generate PNG"):
-            import sys
             print(f"[UI] PNG button clicked for {cid8}", file=sys.stderr)
             with st.spinner("Rendering PNG..."):
                 print(f"[UI] Calling html_to_png...", file=sys.stderr)
@@ -1897,7 +1894,6 @@ def page_flow_replay(active_name: str, active_meta: dict):
         zip_path = sims_dir / f"replay_{cid8}_all_flows.zip"
 
         if st.button("📦 Export All Tabs"):
-            import sys
             print(f"[UI] ZIP button clicked for {cid8}", file=sys.stderr)
             with st.spinner("Rendering all tabs..."):
                 print(f"[UI] Calling html_export_all_tabs...", file=sys.stderr)
