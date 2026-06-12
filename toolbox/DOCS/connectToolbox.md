@@ -49,13 +49,13 @@ The menu is two levels: pick a **group**, then pick a **tool** within it. Press 
 | 1 | Flow Analyze | `flow_analyze.py` |
 | 2 | Flow Attr Search | `flow_attr_search.py` |
 | 3 | Flow Review (AI) | `flow_review.py` |
-| 5 | Flow Usage | `flow_usage.py` |
-| 6 | Flow Traffic | `flow_traffic.py` |
-| 7 | Flow Compare | `flow_compare.py` |
-| 8 | Flow Promote | `flow_promote.py` |
-| 9 | Orphaned Resources | `orphaned_resources.py` |
-| 10 | Export Flow | `export_flow.py` |
-| 11 | Flow to Chart | `flow_to_chart.py` |
+| 4 | Flow Usage | `flow_usage.py` |
+| 5 | Flow Traffic | `flow_traffic.py` |
+| 6 | Flow Compare | `flow_compare.py` |
+| 7 | Flow Promote | `flow_promote.py` |
+| 8 | Orphaned Resources | `orphaned_resources.py` |
+| 9 | Export Flow | `export_flow.py` |
+| 10 | Flow to Chart | `flow_to_chart.py` |
 
 ### Log Insights
 | # | Tool | Script |
@@ -223,3 +223,19 @@ Run from anywhere with `connecttools`.
 - All tools run as subprocesses, so a `sys.exit` in any tool returns cleanly to the menu rather than closing the launcher.
 - Export Flow includes an option to list available flows before entering a name, useful when you don't know the exact flow name.
 - Flow to Chart defaults to `html` format in the menu (interactive viewer), regardless of the CLI default.
+
+## Streamlit GUI (app.py)
+
+A browser-based alternative to the terminal menu for local use.
+
+```bash
+streamlit run app.py          # from the toolbox/ directory
+```
+
+Requires `pip install streamlit` (one-time). Pages: 🔑 Credentials, 🔎 Contact Search, 🔍 Contact Investigator, 📊 Log Insights.
+
+**Credential management:** paste an AWS IAM Identity Center Option 2 block → credentials written to `~/.aws/credentials`; per-profile metadata (instance ID, region, log group) stored in `ct_config`. Each profile has its own defaults. The sidebar profile selector updates all page defaults when switched. Credentials can be refreshed per-profile with individual fields (auto-opens when expired).
+
+**Contact Search → Investigator flow:** search by date/filter → click a row → Investigate → Contact Investigator opens with contact ID pre-filled.
+
+**Log Insights:** loads `queries/*.sql` files; editable query text with Save/Save As; auto-detects `{placeholder}` variables; Discover popover for log group selection with Set default button.

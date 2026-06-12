@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A growing set of Python CLI tools for **Amazon Connect**. Each tool is a single self-contained script, designed to run in AWS CloudShell without any local setup beyond one pip install.
+A growing set of Python CLI tools for **Amazon Connect**, plus a local Streamlit GUI (`app.py`). Each CLI tool is a single self-contained script designed to run in AWS CloudShell. The GUI runs locally via `streamlit run app.py` from the `toolbox/` directory.
 
 ## Setup
 
@@ -427,6 +427,244 @@ python contacts_handled.py --instance-arn <ARN> --region us-east-1
 - Time window is always the previous full calendar month in UTC (override with `--timezone`)
 - Accepts either `--instance-id` or `--instance-arn` (mutually exclusive)
 - botocore retry config with exponential backoff (max 10 attempts)
+
+---
+
+### `contact_search.py` — Contact Search
+
+Search contacts by time range with optional filters; export to CSV or JSON.
+
+```bash
+python contact_search.py --instance-id <UUID> --start 2026-06-01 --end 2026-06-02
+python contact_search.py --instance-id <UUID> --start 2026-06-01 --end 2026-06-02 \
+    --channel VOICE --initiation-method INBOUND --queue <QUEUE-ID>
+python contact_search.py --instance-id <UUID> --start 2026-06-01 --end 2026-06-02 \
+    --attribute Department=Billing --output billing.csv
+```
+
+**Required IAM:** `connect:SearchContacts`, `connect:ListUsers`
+
+**Key behaviors:**
+- Filters: `--channel`, `--queue`, `--agent`, `--agent-login`, `--initiation-method`, `--attribute KEY=VALUE` (all repeatable)
+- `--sort-by` / `--sort-order` for result ordering; `--limit` / `--offset` for paging
+- SearchContacts throttled at 0.5 TPS — 2s sleep between pages; large ranges are slow
+
+---
+
+### `agent_list.py` — Agent List
+
+List agents with routing profile, hierarchy, and security profile details.
+
+```bash
+python agent_list.py --instance-id <UUID> --region us-east-1
+python agent_list.py --instance-id <UUID> --search jsmith
+python agent_list.py --instance-id <UUID> --routing-profile "Tier 1" --status active
+```
+
+**Required IAM:** `connect:ListUsers`, `connect:DescribeUser`, `connect:ListRoutingProfiles`, `connect:DescribeRoutingProfile`, `connect:ListSecurityProfiles`
+
+**Key behaviors:** `--search` (username substring), `--routing-profile` (name substring), `--status active|inactive|all`; resolves RP name, hierarchy group, security profile names via cached describe calls
+
+---
+
+### `agent_activity.py` — Agent Activity Report
+
+Per-agent activity metrics for a given period using GetMetricDataV2.
+
+```bash
+python agent_activity.py --instance-id <UUID> --region us-east-1 --last 7d
+python agent_activity.py --instance-id <UUID> --start 2026-06-01 --end 2026-06-02 --csv report.csv
+```
+
+**Required IAM:** `connect:GetMetricDataV2`, `connect:ListUsers`
+
+---
+
+### `agent_contacts.py` — Agent Contacts
+
+CONTACTS_HANDLED per agent for a calendar month, broken down by queue type.
+
+```bash
+python agent_contacts.py --instance-id <UUID> --region us-east-1
+python agent_contacts.py --instance-id <UUID> --month 2026-05 --csv may.csv
+```
+
+**Required IAM:** `connect:GetMetricDataV2`, `connect:ListUsers`
+
+---
+
+### `flow_compare.py` — Flow Compare
+
+Diff two exported Amazon Connect flow JSONs — no AWS calls required.
+
+```bash
+python flow_compare.py old_flow.json new_flow.json
+```
+
+**Key behaviors:** Reports added blocks, removed blocks, and modified blocks with per-field diffs of Parameters and Transitions. Accepts `export_flow.py` envelope format or raw flow JSON.
+
+---
+
+### `flow_promote.py` — Flow Promote
+
+Promote contact flows from Dev to Prod with ARN remapping and dependency resolution.
+
+```bash
+python flow_promote.py --dev-instance-id <UUID> --prod-instance-id <UUID> \
+    --name "Main IVR" --region us-east-1
+```
+
+**Required IAM:** `connect:ListContactFlows`, `connect:DescribeContactFlow`, `connect:CreateContactFlow`, `connect:UpdateContactFlowContent`, `connect:ListQueues`, `connect:ListPrompts`, `connect:ListHoursOfOperations`, `connect:ListLambdaFunctions`
+
+**Key behaviors:** Exports flows from Dev, remaps all resource ARNs to Prod equivalents by name-matching, imports to Prod. Detects and resolves sub-flow dependencies. Advanced options (dry run, publish after import, etc.) gated behind `--advanced` / toolbox Advanced options prompt.
+
+---
+
+### `flow_review.py` — Flow Review (AI)
+
+AI-powered deep analysis of a contact flow using the Claude API.
+
+```bash
+python flow_review.py Main_IVR.json
+python flow_review.py Main_IVR.json --model claude-opus-4-8
+```
+
+**Requires:** `ANTHROPIC_API_KEY` environment variable
+
+**Key behaviors:** Sends a structured flow summary to Claude and returns plain-English recommendations covering UX, reliability, structure, and Connect best practices. No AWS API calls.
+
+---
+
+### `flow_usage.py` — Flow Usage
+
+Count how often each contact flow is used via CloudWatch Logs Insights.
+
+```bash
+python flow_usage.py --instance-id <UUID> --last 7d
+python flow_usage.py --instance-id <UUID> --start 2026-06-01 --end 2026-06-02 --by invocations
+```
+
+**Required IAM:** `logs:StartQuery`, `logs:GetQueryResults`, `logs:DescribeLogGroups`
+
+**Key behaviors:** `--by contacts|invocations`; `--flow` name filter; uses Logs Insights (fast aggregate, not FilterLogEvents). Complement to `flow_traffic.py` which uses FilterLogEvents for per-contact paths.
+
+---
+
+### `flow_traffic.py` — Flow Traffic
+
+Flow entry counts and per-contact ordered flow paths from CloudWatch FilterLogEvents.
+
+```bash
+python flow_traffic.py --instance-id <UUID> --last 4h
+python flow_traffic.py --instance-id <UUID> --last 24h --no-paths --csv counts.csv
+python flow_traffic.py --instance-id <UUID> --contact-id <UUID>   # single contact
+```
+
+**Required IAM:** `connect:DescribeInstance`, `logs:FilterLogEvents`
+
+**Key behaviors:** Shows entry counts (unique contacts + re-entries separately) and per-contact ordered flow sequences. `--no-paths` for counts only. `--flow` filter. `--max N` caps contacts scanned (default 200).
+
+---
+
+### `log_insights.py` — Log Insights
+
+Query CloudWatch Logs Insights against a Connect log group and export to Excel.
+
+```bash
+python log_insights.py --query queries/CID_Search_GM.sql --last 24h
+python log_insights.py --query report.sql --start 2026-06-01 --end 2026-06-02 \
+    --log-group /aws/connect/my-instance --var ContactId=abc-123
+```
+
+**Required IAM:** `logs:StartQuery`, `logs:GetQueryResults`, `logs:StopQuery`, `logs:DescribeLogGroups`
+
+**Key behaviors:** Query files live in `queries/` (`.sql` or `.txt`). `{KEY}` placeholders substituted via `--var KEY=VALUE`. Auto-discovers `/aws/connect/*` log groups if `--log-group` omitted. Exports to `.xlsx` with styled header row and auto-fitted columns.
+
+---
+
+### `log_viewer.py` — Log Viewer (TUI)
+
+Interactive Textual TUI timeline for an Amazon Connect contact.
+
+```bash
+python log_viewer.py --instance-id <UUID> --contact-id <UUID> --region us-east-1
+python log_viewer.py --instance-id <UUID>   # enter contact ID inside the TUI via [n]
+```
+
+**Required IAM:** `connect:DescribeContact`, `connect:DescribeInstance`, `logs:FilterLogEvents`, `connect:ListRealtimeContactAnalysisSegmentsV2`
+
+**Key behaviors:** Scrollable, filterable event timeline. Key bindings: `/` filter, `Enter` open detail panel, `l` fetch Lambda logs on-demand, `n` new contact modal, `e` JSON export, `q` quit.
+
+---
+
+### `orphaned_resources.py` — Orphaned Resources
+
+Find unused resources in a Connect instance — flows, queues, prompts, hours not referenced by any flow.
+
+```bash
+python orphaned_resources.py --instance-id <UUID> --region us-east-1
+python orphaned_resources.py --instance-id <UUID> --verify-lambdas --csv orphans.csv
+```
+
+**Required IAM:** `connect:ListContactFlows`, `connect:DescribeContactFlow`, `connect:ListQueues`, `connect:ListPrompts`, `connect:ListHoursOfOperations`, `lambda:GetFunction` (optional, for `--verify-lambdas`)
+
+---
+
+### `phone_numbers.py` — Phone Numbers
+
+List all claimed phone numbers and their associated contact flows.
+
+```bash
+python phone_numbers.py --instance-id <UUID> --region us-east-1
+python phone_numbers.py --instance-id <UUID> --flow "Main IVR" --unassigned-only
+```
+
+**Required IAM:** `connect:ListPhoneNumbersV2`, `connect:ListContactFlows`
+
+---
+
+### `describe_resource.py` — Describe Resource
+
+Look up any Amazon Connect resource by ARN — queue, flow, user, routing profile, and more.
+
+```bash
+python describe_resource.py arn:aws:connect:us-east-1:123456789012:instance/xxx/queue/yyy
+python describe_resource.py <bare-id> --type queue --instance-id <UUID>
+```
+
+**Required IAM:** Varies by resource type — `connect:DescribeQueue`, `connect:DescribeContactFlow`, `connect:DescribeUser`, etc.
+
+---
+
+### `cid_journey.py` — CID Journey
+
+Render a Cytoscape.js caller journey map from a CID_Search xlsx export.
+
+```bash
+python cid_journey.py CID_Search_export.xlsx --output journey.html
+```
+
+**No AWS calls.** Takes an Excel file produced by the Log Insights `CID_Search_GM.sql` query and renders an interactive HTML flow map.
+
+---
+
+### `app.py` — Streamlit GUI
+
+Browser-based local GUI for connectTools. Run with `streamlit run app.py` from the `toolbox/` directory.
+
+```bash
+streamlit run app.py
+```
+
+**Requires:** `pip install streamlit` (one-time). `streamlit` must be on PATH — added to `C:\Users\nathan.littlerea\AppData\Roaming\Python\Python312\Scripts` on 2026-06-12.
+
+**Pages:**
+- **🔑 Credentials** — paste AWS IAM Identity Center Option 2 block → written to `~/.aws/credentials`; per-profile metadata (display name, instance ID, region, log group) in `ct_config`; inline credential refresh with individual fields (auto-opens on 🔴 expired)
+- **🔎 Contact Search** — date/filter form; selectable results table; "Investigate →" navigates to Contact Investigator with contact ID pre-filled
+- **🔍 Contact Investigator** — section checkboxes (Overview, Timeline, Lambda, Recordings, Logs); tabbed results; wired directly to `contact_investigator.py` functions
+- **📊 Log Insights** — editable query editor; loads `queries/*.sql`; Save / Save As; live `{placeholder}` detection; Discover popover for log group; relative or date-range time window; results as dataframe + Excel download
+
+**Profile data model** — `ct_config` under `gui_profiles[profile_name]`: `{display_name, instance_id, region, log_group, added_at}`. Each profile has its own defaults; switching profiles resets page state.
 
 ---
 
