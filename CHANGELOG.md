@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-12 (continued)
+- **Flow Replay** — PNG/ZIP export for flow diagrams. `📸 Generate PNG` renders the Cytoscape.js HTML diagram to a screenshot via Playwright. `📦 Export All Tabs` renders each flow tab separately and bundles them in a ZIP file. Download buttons appear after rendering completes. Setup: `pip install playwright && playwright install chromium`.
+- **Flow Replay** — Default log group now saved per-profile with `💾 Save` button. Defaults populated from profile settings; users can update without re-entering contact ID.
+- **Queue names** — Contact Search and Contact Investigator now display queue names (not IDs) where available.
+- **Unicode fixes** — Windows console encoding issues (box-drawing, arrows) replaced with ASCII equivalents across flowSim tools.
+- **Project structure** — Reorganized into `lib/` (shared modules), `connectToolsGui/` (Streamlit GUI), and `toolbox/` (CLI tools). All tools import from lib/ to eliminate duplication.
+
 ## 2026-06-12
 - **app.py** — Streamlit GUI (local). Two pages: **Credentials** (paste AWS IAM Identity Center Option 2 block → parsed + saved to `~/.aws/credentials`; profile list with add/edit/delete/check; Connect instance ID and region stored per profile in `ct_config`) and **Contact Investigator** (Contact ID lookup with tabbed section output — Overview, Timeline, Lambda, Recordings, Logs — wired directly to `contact_investigator.py` functions). Run with `streamlit run app.py`.
 

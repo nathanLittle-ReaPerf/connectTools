@@ -1709,15 +1709,14 @@ def page_flow_replay(active_name: str, active_meta: dict):
                 st.success("Saved!")
                 st.rerun()
 
-    # Check if we have a saved replay result
+    # Check if we have a saved replay result (for button clicks to work)
     saved_replay = st.session_state.get("_saved_replay", {})
     if saved_replay and saved_replay.get("cid"):
         # Resume from saved state
         cid = saved_replay["cid"]
         cid8 = cid[:8]
         log_group_val = saved_replay["log_group"]
-        flow_override = ""  # No override when resuming
-        print(f"[REPLAY] Resuming from saved state: {cid8}", file=sys.stderr)
+        flow_override = ""
     else:
         # ── Form ──────────────────────────────────────────────────────────────────
         with st.form("replay_form"):
@@ -1868,12 +1867,6 @@ def page_flow_replay(active_name: str, active_meta: dict):
     import streamlit.components.v1 as components
     components.html(html_content, height=720, scrolling=False)
 
-    # Debug: show page rerun count
-    if "_rerun_count" not in st.session_state:
-        st.session_state._rerun_count = 0
-    st.session_state._rerun_count += 1
-    st.write(f"DEBUG: Page rerun #{st.session_state._rerun_count}")
-
     col1, col2, col3 = st.columns(3)
     with col1:
         st.download_button(
@@ -1886,23 +1879,14 @@ def page_flow_replay(active_name: str, active_meta: dict):
         sims_dir = FLOWSIM_DIR / "Simulations"
         png_path = sims_dir / f"replay_{cid8}.png"
 
-        st.write(f"DEBUG: sims_dir = {sims_dir}")
-        st.write(f"DEBUG: png_path = {png_path}")
-
         if st.button("📸 Generate PNG"):
-            st.write("DEBUG: Button clicked!")
-            print(f"[UI] PNG button clicked for {cid8}", file=sys.stderr)
             with st.spinner("Rendering PNG..."):
-                print(f"[UI] Calling html_to_png...", file=sys.stderr)
-                result = html_to_png(html_content, png_path)
-                print(f"[UI] html_to_png returned: {result}", file=sys.stderr)
-                if result:
+                if html_to_png(html_content, png_path):
                     st.success("PNG generated!")
                 else:
-                    st.error("Failed to generate PNG. Check server console for details.")
+                    st.error("Failed to generate PNG. Ensure Playwright is installed: `pip install playwright && playwright install`")
 
         if png_path.exists():
-            print(f"[UI] PNG exists: {png_path}", file=sys.stderr)
             png_data = png_path.read_bytes()
             st.download_button(
                 "💾 Save PNG",
@@ -1911,25 +1895,18 @@ def page_flow_replay(active_name: str, active_meta: dict):
                 mime="image/png",
                 key=f"download_png_{cid8}",
             )
-        else:
-            print(f"[UI] PNG does not exist: {png_path}", file=sys.stderr)
 
     with col3:
         zip_path = sims_dir / f"replay_{cid8}_all_flows.zip"
 
         if st.button("📦 Export All Tabs"):
-            print(f"[UI] ZIP button clicked for {cid8}", file=sys.stderr)
             with st.spinner("Rendering all tabs..."):
-                print(f"[UI] Calling html_export_all_tabs...", file=sys.stderr)
-                result = html_export_all_tabs(html_content, zip_path)
-                print(f"[UI] html_export_all_tabs returned: {result}", file=sys.stderr)
-                if result:
+                if html_export_all_tabs(html_content, zip_path):
                     st.success("All tabs exported!")
                 else:
-                    st.error("Failed to export tabs. Check server console for details.")
+                    st.error("Failed to export tabs. Ensure Playwright is installed: `pip install playwright && playwright install`")
 
         if zip_path.exists():
-            print(f"[UI] ZIP exists: {zip_path}", file=sys.stderr)
             zip_data = zip_path.read_bytes()
             st.download_button(
                 "💾 Save ZIP",
@@ -1938,8 +1915,6 @@ def page_flow_replay(active_name: str, active_meta: dict):
                 mime="application/zip",
                 key=f"download_zip_{cid8}",
             )
-        else:
-            print(f"[UI] ZIP does not exist: {zip_path}", file=sys.stderr)
 
     # Quick links
     lc1, lc2 = st.columns(2)
