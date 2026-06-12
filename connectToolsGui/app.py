@@ -1879,42 +1879,42 @@ def page_flow_replay(active_name: str, active_meta: dict):
         sims_dir = FLOWSIM_DIR / "Simulations"
         png_path = sims_dir / f"replay_{cid8}.png"
 
-        if st.button("📸 Generate PNG"):
-            with st.spinner("Rendering PNG..."):
-                if html_to_png(html_content, png_path):
-                    st.success("PNG generated!")
-                else:
-                    st.error("Failed to generate PNG. Ensure Playwright is installed: `pip install playwright && playwright install`")
-
         if png_path.exists():
             png_data = png_path.read_bytes()
             st.download_button(
-                "💾 Save PNG",
+                "⬇ Download PNG",
                 data=png_data,
                 file_name=f"replay_{cid8}.png",
                 mime="image/png",
                 key=f"download_png_{cid8}",
             )
+        else:
+            if st.button("📸 Generate PNG"):
+                with st.spinner("Rendering PNG..."):
+                    if html_to_png(html_content, png_path):
+                        st.rerun()
+                    else:
+                        st.error("Failed to generate PNG. Ensure Playwright is installed: `pip install playwright && playwright install`")
 
     with col3:
         zip_path = sims_dir / f"replay_{cid8}_all_flows.zip"
 
-        if st.button("📦 Export All Tabs"):
-            with st.spinner("Rendering all tabs..."):
-                if html_export_all_tabs(html_content, zip_path):
-                    st.success("All tabs exported!")
-                else:
-                    st.error("Failed to export tabs. Ensure Playwright is installed: `pip install playwright && playwright install`")
-
         if zip_path.exists():
             zip_data = zip_path.read_bytes()
             st.download_button(
-                "💾 Save ZIP",
+                "⬇ Download ZIP",
                 data=zip_data,
                 file_name=f"replay_{cid8}_flows.zip",
                 mime="application/zip",
                 key=f"download_zip_{cid8}",
             )
+        else:
+            if st.button("📦 Export All Tabs"):
+                with st.spinner("Rendering all tabs..."):
+                    if html_export_all_tabs(html_content, zip_path):
+                        st.rerun()
+                    else:
+                        st.error("Failed to export tabs. Ensure Playwright is installed: `pip install playwright && playwright install`")
 
     # Quick links
     lc1, lc2 = st.columns(2)
