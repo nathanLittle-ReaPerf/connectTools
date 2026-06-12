@@ -1811,47 +1811,45 @@ def page_flow_replay(active_name: str, active_meta: dict):
             mime="text/html",
         )
     with col2:
+        sims_dir = FLOWSIM_DIR / "Simulations"
+        png_path = sims_dir / f"replay_{cid8}.png"
+
         if st.button("📸 Generate PNG"):
-            png_path = Path(st.session_state.get("_flow_replay_png_path", ""))
-            if not png_path.exists():
-                with st.spinner("Rendering PNG..."):
-                    sims_dir = FLOWSIM_DIR / "Simulations"
-                    png_path = sims_dir / f"replay_{cid8}.png"
-                    if html_to_png(html_content, png_path):
-                        st.session_state["_flow_replay_png_path"] = str(png_path)
-                        st.rerun()
-                    else:
-                        st.error("Failed to generate PNG. Is Playwright installed? Try: pip install playwright && playwright install")
+            with st.spinner("Rendering PNG..."):
+                if html_to_png(html_content, png_path):
+                    st.success("PNG generated!")
+                else:
+                    st.error("Failed to generate PNG. Is Playwright installed? Try: pip install playwright && playwright install")
 
-            if png_path.exists():
-                png_data = png_path.read_bytes()
-                st.download_button(
-                    "💾 Save PNG",
-                    data=png_data,
-                    file_name=f"replay_{cid8}.png",
-                    mime="image/png",
-                )
+        if png_path.exists():
+            png_data = png_path.read_bytes()
+            st.download_button(
+                "💾 Save PNG",
+                data=png_data,
+                file_name=f"replay_{cid8}.png",
+                mime="image/png",
+                key=f"download_png_{cid8}",
+            )
+
     with col3:
-        if st.button("📦 Export All Tabs"):
-            zip_path = Path(st.session_state.get("_flow_replay_zip_path", ""))
-            if not zip_path.exists():
-                with st.spinner("Rendering all tabs..."):
-                    sims_dir = FLOWSIM_DIR / "Simulations"
-                    zip_path = sims_dir / f"replay_{cid8}_all_flows.zip"
-                    if html_export_all_tabs(html_content, zip_path):
-                        st.session_state["_flow_replay_zip_path"] = str(zip_path)
-                        st.rerun()
-                    else:
-                        st.error("Failed to export tabs. Is Playwright installed? Try: pip install playwright && playwright install")
+        zip_path = sims_dir / f"replay_{cid8}_all_flows.zip"
 
-            if zip_path.exists():
-                zip_data = zip_path.read_bytes()
-                st.download_button(
-                    "💾 Save ZIP",
-                    data=zip_data,
-                    file_name=f"replay_{cid8}_flows.zip",
-                    mime="application/zip",
-                )
+        if st.button("📦 Export All Tabs"):
+            with st.spinner("Rendering all tabs..."):
+                if html_export_all_tabs(html_content, zip_path):
+                    st.success("All tabs exported!")
+                else:
+                    st.error("Failed to export tabs. Is Playwright installed? Try: pip install playwright && playwright install")
+
+        if zip_path.exists():
+            zip_data = zip_path.read_bytes()
+            st.download_button(
+                "💾 Save ZIP",
+                data=zip_data,
+                file_name=f"replay_{cid8}_flows.zip",
+                mime="application/zip",
+                key=f"download_zip_{cid8}",
+            )
 
     # Quick links
     lc1, lc2 = st.columns(2)
