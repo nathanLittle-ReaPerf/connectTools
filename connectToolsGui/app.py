@@ -1716,6 +1716,7 @@ def page_flow_replay(active_name: str, active_meta: dict):
         cid = saved_replay["cid"]
         cid8 = cid[:8]
         log_group_val = saved_replay["log_group"]
+        flow_override = ""  # No override when resuming
         print(f"[REPLAY] Resuming from saved state: {cid8}", file=sys.stderr)
     else:
         # ── Form ──────────────────────────────────────────────────────────────────
