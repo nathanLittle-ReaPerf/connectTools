@@ -31,4 +31,19 @@ env/
 Thumbs.db
 
 # CLAUDE.md does not need to be a part of the repo.
-CLAUDE.mdawsProgAccess.png
+CLAUDE.md
+
+# Security: never commit credentials, configs, or secrets
+.env*
+*.env
+credentials
+~/.aws/
+~/.connecttools/
+*.key
+*.pem
+*.p8
+awsProgAccess.png
+*credentials.json
+*secret*.json
+*token*
+config.local.json
