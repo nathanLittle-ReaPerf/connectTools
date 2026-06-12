@@ -1709,33 +1709,45 @@ def page_flow_replay(active_name: str, active_meta: dict):
                 st.success("Saved!")
                 st.rerun()
 
-    # ── Form ──────────────────────────────────────────────────────────────────
-    with st.form("replay_form"):
-        contact_id = st.text_input(
-            "Contact ID",
-            value=st.session_state.pop("prefill_replay_cid", ""),
-            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-        )
-        log_group_val = st.text_input(
-            "Log group (for this replay)",
-            value=new_lg if "flow_replay_lg_input" in st.session_state else current_lg,
-            placeholder="/aws/connect/<alias>",
-        )
-        flow_override = st.text_input(
-            "Entry flow override",
-            placeholder="Leave blank to auto-detect from logs",
-            help="Only needed if the entry flow can't be detected from the logs",
-        )
-        submitted = st.form_submit_button("▶ Replay", type="primary")
+    # Check if we have a saved replay result
+    saved_replay = st.session_state.get("_saved_replay", {})
+    if saved_replay and saved_replay.get("cid"):
+        # Resume from saved state
+        cid = saved_replay["cid"]
+        cid8 = cid[:8]
+        log_group_val = saved_replay["log_group"]
+        print(f"[REPLAY] Resuming from saved state: {cid8}", file=sys.stderr)
+    else:
+        # ── Form ──────────────────────────────────────────────────────────────────
+        with st.form("replay_form"):
+            contact_id = st.text_input(
+                "Contact ID",
+                value=st.session_state.pop("prefill_replay_cid", ""),
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+            )
+            log_group_val = st.text_input(
+                "Log group (for this replay)",
+                value=new_lg if "flow_replay_lg_input" in st.session_state else current_lg,
+                placeholder="/aws/connect/<alias>",
+            )
+            flow_override = st.text_input(
+                "Entry flow override",
+                placeholder="Leave blank to auto-detect from logs",
+                help="Only needed if the entry flow can't be detected from the logs",
+            )
+            submitted = st.form_submit_button("▶ Replay", type="primary")
 
-    if not submitted:
-        return
-    if not contact_id.strip():
-        st.error("Contact ID is required.")
-        return
+        if not submitted:
+            return
+        if not contact_id.strip():
+            st.error("Contact ID is required.")
+            return
 
-    cid = contact_id.strip()
-    cid8 = cid[:8]
+        cid = contact_id.strip()
+        cid8 = cid[:8]
+
+        # Save replay params for next rerun
+        st.session_state["_saved_replay"] = {"cid": cid, "log_group": log_group_val}
 
     # ── Steps ─────────────────────────────────────────────────────────────────
     with st.status("Replaying contact…", expanded=True) as status:
@@ -1843,6 +1855,7 @@ def page_flow_replay(active_name: str, active_meta: dict):
         status.update(label="Replay complete!", state="complete")
 
     # ── Render HTML ───────────────────────────────────────────────────────────
+    html_path = FLOWSIM_DIR / "Simulations" / f"replay_{cid8}.html"
     if not html_path.exists():
         st.error("HTML file was not produced.")
         return
