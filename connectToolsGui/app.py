@@ -1640,6 +1640,23 @@ def page_flow_replay(active_name: str, active_meta: dict):
     st.caption(f"Flow cache: `{flow_cache}`  ·  "
                f"{sum(1 for _ in flow_cache.glob('*.json'))} flow file(s) cached")
 
+    # ── Save default log group ────────────────────────────────────────────────
+    current_lg = get_profile_log_group(active_name, instance_id)
+    lg1, lg2 = st.columns([4, 1])
+    with lg1:
+        new_lg = st.text_input(
+            "Default log group",
+            value=current_lg,
+            placeholder="/aws/connect/<alias>",
+            key="flow_replay_lg_input",
+        )
+    with lg2:
+        if st.button("💾 Save", help="Save as default for this profile"):
+            if new_lg.strip():
+                set_profile_log_group(active_name, instance_id, new_lg)
+                st.success("Saved!")
+                st.rerun()
+
     # ── Form ──────────────────────────────────────────────────────────────────
     with st.form("replay_form"):
         contact_id = st.text_input(
@@ -1648,8 +1665,8 @@ def page_flow_replay(active_name: str, active_meta: dict):
             placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
         )
         log_group_val = st.text_input(
-            "Log group",
-            value=get_profile_log_group(active_name, instance_id),
+            "Log group (for this replay)",
+            value=new_lg if "flow_replay_lg_input" in st.session_state else current_lg,
             placeholder="/aws/connect/<alias>",
         )
         flow_override = st.text_input(
