@@ -4,14 +4,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A growing set of Python CLI tools for **Amazon Connect**, plus a local Streamlit GUI (`app.py`). Each CLI tool is a single self-contained script designed to run in AWS CloudShell. The GUI runs locally via `streamlit run app.py` from the `toolbox/` directory.
+A growing set of Python CLI tools for **Amazon Connect**, plus a local Streamlit GUI. The project is organized into:
+- **`toolbox/`** — CLI tools for AWS CloudShell (interactive menu via `connectToolbox.py`)
+- **`lib/`** — Shared modules (contact investigator, search, flow analysis, etc.) imported by both CLI and GUI
+- **`connectToolsGui/`** — Standalone Streamlit GUI project for local use
+- **`flowSim/`** — Flow simulation and replay visualization (separate sub-project)
+
+Each CLI tool is a single self-contained script. The GUI is in its own project directory with its own `requirements.txt` and can be cloned/deployed independently.
 
 ## Setup
 
+### CLI Tools (`toolbox/`)
 Dependencies (`python-dateutil`, `openpyxl`) are auto-installed by `connectToolbox.py` on first run. For running individual scripts directly:
 ```bash
+cd toolbox
 pip install python-dateutil openpyxl --user
+python connectToolbox.py
 ```
+
+### GUI (`connectToolsGui/`)
+```bash
+cd connectToolsGui
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+Shared modules in `lib/` are automatically found via `sys.path.insert` in both CLI tools and the GUI.
 
 ## Tools
 
