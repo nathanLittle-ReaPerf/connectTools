@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-06-12
+- **app.py** — Streamlit GUI (local). Two pages: **Credentials** (paste AWS IAM Identity Center Option 2 block → parsed + saved to `~/.aws/credentials`; profile list with add/edit/delete/check; Connect instance ID and region stored per profile in `ct_config`) and **Contact Investigator** (Contact ID lookup with tabbed section output — Overview, Timeline, Lambda, Recordings, Logs — wired directly to `contact_investigator.py` functions). Run with `streamlit run app.py`.
+
 ## 2026-06-11
 - **flow_analyze.py** — New unified flow analysis tool. Merges `flow_scan` (hard errors: broken refs, dead ends, missing handlers) and `flow_optimize` (rule-based suggestions: UX, reliability, structure, maintainability) into one script. Default runs both passes in a single `DescribeContactFlow` call per flow. `--scan` / `--optimize` flags to restrict to one pass. Replaces both tools in the Flows menu.
 - **contact_investigator.py** — New unified contact investigation tool. Consolidates `contact_inspect`, `contact_timeline`, `lambda_tracer`, `contact_recordings`, and `contact_logs` into one script with section flags (`--overview`, `--timeline`, `--lambda`, `--recordings`, `--logs`, `--all`). Shared API calls (DescribeContact, CloudWatch log events, Contact Lens) are made once and reused across sections. Added as "Contact Investigator" at the top of the Contacts group in the toolbox.
