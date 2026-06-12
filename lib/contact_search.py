@@ -8,10 +8,6 @@ import csv
 import datetime as dt
 import json
 import sys
-from pathlib import Path
-
-# Add lib directory to path so we can import shared modules
-sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 import time
 
 import boto3

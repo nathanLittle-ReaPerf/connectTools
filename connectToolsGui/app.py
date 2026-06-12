@@ -21,8 +21,8 @@ import streamlit as st
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-# ── Add toolbox dir to path so we can import sibling modules ──────────────────
-sys.path.insert(0, str(Path(__file__).parent))
+# ── Add lib and flowSim dirs to path so we can import shared modules ────────────
+sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 import contact_investigator as ci
 import contact_diff as cd
 import contact_search as cs

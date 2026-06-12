@@ -16,6 +16,9 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 
+# Add lib directory to path so we can import shared modules
+sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
+
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError

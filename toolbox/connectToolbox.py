@@ -10,6 +10,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Add lib directory to path so all tools can import shared modules
+sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
+
 import ct_config
 
 # Force UTF-8 output immediately so box-drawing chars work on Windows.
