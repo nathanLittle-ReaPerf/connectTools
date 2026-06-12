@@ -1854,6 +1854,12 @@ def page_flow_replay(active_name: str, active_meta: dict):
     import streamlit.components.v1 as components
     components.html(html_content, height=720, scrolling=False)
 
+    # Debug: show page rerun count
+    if "_rerun_count" not in st.session_state:
+        st.session_state._rerun_count = 0
+    st.session_state._rerun_count += 1
+    st.write(f"DEBUG: Page rerun #{st.session_state._rerun_count}")
+
     col1, col2, col3 = st.columns(3)
     with col1:
         st.download_button(
