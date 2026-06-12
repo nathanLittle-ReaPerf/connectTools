@@ -80,7 +80,7 @@ class WalkSession:
     lambda_mocks:           dict       = field(default_factory=dict)
     hours_mocks:            dict       = field(default_factory=dict)
     staffing_mocks:         dict       = field(default_factory=dict)
-    # fn_name → list of $.External attr names expected from that Lambda
+    # fn_name -> list of $.External attr names expected from that Lambda
     lambda_output_templates: dict      = field(default_factory=dict)
     path:                   list       = field(default_factory=list)  # list[Step]
     step_count:             int        = 0
@@ -159,7 +159,7 @@ def _restore_snap(snap: _Snapshot, state: SimState,
 
 
 def _parse_back(val: str) -> int:
-    """Parse 'back' or 'back N' → int steps (≥1)."""
+    """Parse 'back' or 'back N' -> int steps (≥1)."""
     parts = val.strip().split()
     if len(parts) > 1 and parts[1].isdigit():
         return max(1, int(parts[1]))
@@ -238,7 +238,7 @@ def _detail(text: str, color: str = "") -> None:
 
 def _result(text: str, ok: bool = True) -> None:
     col = _GR if ok else _RD
-    print(f"         {col}→ {text}{_R}")
+    print(f"         {col}-> {text}{_R}")
 
 
 # ── Lambda input parameter resolution ────────────────────────────────────────
@@ -314,7 +314,7 @@ def _walk_block(
             q = (params.get("QueueId") or (params.get("Queue") or {}).get("Id") or
                  state.queue or "configured queue")
             _result(f"Transferred to queue: {q}")
-            return "", True, "", f"→ Queue: {q}", ""
+            return "", True, "", f"-> Queue: {q}", ""
         elif btype == "DisconnectParticipant":
             _result("Contact disconnected", ok=False)
             return "", True, "", "Contact disconnected", ""
@@ -327,8 +327,8 @@ def _walk_block(
         target = params.get("ContactFlowId") or params.get("FlowModuleId") or ""
         # ARNs look like …:instance/UUID/contact-flow/FLOW-UUID — extract the UUID
         target_id = target.split("/")[-1] if "/" in target else target
-        _result(f"→ sub-flow: {target_id or '?'}")
-        return "", False, target_id, f"Transfer to flow: {target_id or '?'}", "→ sub-flow"
+        _result(f"-> sub-flow: {target_id or '?'}")
+        return "", False, target_id, f"Transfer to flow: {target_id or '?'}", "-> sub-flow"
 
     # ── Set attributes ────────────────────────────────────────────────────────
     if btype in SET_ATTR_TYPES:
@@ -350,8 +350,8 @@ def _walk_block(
     if btype == "SetQueue":
         q = params.get("QueueId") or (params.get("Queue") or {}).get("Id") or ""
         state.queue = q
-        _detail(f"Queue → {q or '?'}", _GR)
-        return default_next, False, "", f"Queue → {q or '?'}", ""
+        _detail(f"Queue -> {q or '?'}", _GR)
+        return default_next, False, "", f"Queue -> {q or '?'}", ""
 
     # ── Play message ──────────────────────────────────────────────────────────
     if btype == "MessageParticipant":
@@ -374,17 +374,17 @@ def _walk_block(
             ops = [str(o) for o in (c.get("Operands") or [])]
             if evaluate(resolved, c.get("Operator", "Equals"), ops):
                 lbl = _cond_label(c)
-                _result(f"match → {lbl}")
+                _result(f"match -> {lbl}")
                 return (cond.get("NextAction", ""), False, "",
-                        f"'{cmp_expr}'='{resolved}' → {lbl}", lbl)
+                        f"'{cmp_expr}'='{resolved}' -> {lbl}", lbl)
         # Show every condition that was tested so the user can see what's in the flow
         for cond in conditions:
             c   = cond.get("Condition") or {}
             op  = c.get("Operator", "?")
             ops = [str(o) for o in (c.get("Operands") or [])]
-            _detail(f"  tested: {op} {ops}  → no match")
-        _result("no match → default", ok=False)
-        return default_next, False, "", f"'{cmp_expr}'='{resolved}' → no match", "no match"
+            _detail(f"  tested: {op} {ops}  -> no match")
+        _result("no match -> default", ok=False)
+        return default_next, False, "", f"'{cmp_expr}'='{resolved}' -> no match", "no match"
 
     # ── Check hours of operation ──────────────────────────────────────────────
     if btype == "CheckHoursOfOperation":
@@ -437,11 +437,11 @@ def _walk_block(
                 ops = [str(o).lower() for o in (c.get("Operands") or [])]
                 if any(o in ("true", "met") for o in ops):
                     _result("Condition Met")
-                    return cond.get("NextAction", default_next), False, "", f"{metric} → met", "Met"
+                    return cond.get("NextAction", default_next), False, "", f"{metric} -> met", "Met"
             _result("Condition Met")
-            return default_next, False, "", f"{metric} → met", "Met"
+            return default_next, False, "", f"{metric} -> met", "Met"
         _result("Condition Not Met", ok=False)
-        return error_next or default_next, False, "", f"{metric} → not met", "Not Met"
+        return error_next or default_next, False, "", f"{metric} -> not met", "Not Met"
 
     # ── Lambda ────────────────────────────────────────────────────────────────
     if btype in LAMBDA_TYPES:
@@ -471,8 +471,8 @@ def _walk_block(
                 if cached_result == "Success":
                     for attr_name, attr_val in cached_attrs.items():
                         state.external[attr_name] = attr_val
-                _result(f"Lambda → {cached_result}", ok=(cached_result == "Success"))
-                desc = f"Lambda '{fn_name}' → {cached_result} (cached)"
+                _result(f"Lambda -> {cached_result}", ok=(cached_result == "Success"))
+                desc = f"Lambda '{fn_name}' -> {cached_result} (cached)"
                 if cached_result == "Success":
                     return default_next, False, "", desc, "Success"
                 else:
@@ -526,11 +526,11 @@ def _walk_block(
                     mock["attributes"][attr_name] = attr_val
                     state.external[attr_name] = attr_val
                     _detail(f"  $.External.{attr_name} = '{attr_val}'", _GR)
-            _result("Lambda → Success")
-            return default_next, False, "", f"Lambda '{fn_name}' → Success", "Success"
+            _result("Lambda -> Success")
+            return default_next, False, "", f"Lambda '{fn_name}' -> Success", "Success"
         else:
-            _result("Lambda → Error", ok=False)
-            return error_next or default_next, False, "", f"Lambda '{fn_name}' → Error", "Error"
+            _result("Lambda -> Error", ok=False)
+            return error_next or default_next, False, "", f"Lambda '{fn_name}' -> Error", "Error"
 
     # ── DTMF / voice input ────────────────────────────────────────────────────
     if btype in ("GetUserInput", "GetParticipantInput"):
@@ -553,8 +553,8 @@ def _walk_block(
                 _result(f"Input: {val}")
                 return (cond.get("NextAction", ""), False, "",
                         f"Input: {val}", f"Input: {val}")
-        _result(f"Input: {val} (no match → default)", ok=False)
-        return default_next, False, "", f"Input: {val} → no match", f"Input: {val} (no match)"
+        _result(f"Input: {val} (no match -> default)", ok=False)
+        return default_next, False, "", f"Input: {val} -> no match", f"Input: {val} (no match)"
 
     # ── All other blocks ──────────────────────────────────────────────────────
     return default_next, False, "", "", ""
@@ -707,7 +707,7 @@ def _save_scenario(state: SimState, session: WalkSession,
         n += 1
 
     out_path.write_text(json.dumps(scenario, indent=2), encoding="utf-8")
-    print(f"\n  {_GR}Saved → {out_path}{_R}")
+    print(f"\n  {_GR}Saved -> {out_path}{_R}")
     print(f"  {_D}Run with:{_R}")
     print(f"  {_D}  python flow_sim.py --instance-id {instance_id} "
           f"--flow \"{flow_name}\" --scenario \"{out_path}\"{_R}")
@@ -906,7 +906,7 @@ def walk(
         }
         html = _fs.build_html(session.path, state, scenario_for_html, by_id, by_name)
         html_path.write_text(html, encoding="utf-8")
-        print(f"  {_GR}HTML saved → {html_path}{_R}")
+        print(f"  {_GR}HTML saved -> {html_path}{_R}")
 
     print()
     if _ask_bool("Save session as scenario?", default=True):

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """flow_sim.py — Simulate a contact's path through Amazon Connect flows.
 
 Loads a scenario file (produced by flow_map.py) and a starting flow name,
@@ -83,7 +83,7 @@ NOTES
 """
 
 
-# ── Block type metadata (from flow_to_chart.py) ───────────────────────────────
+# -- Block type metadata (from flow_to_chart.py) -------------------------------
 
 TYPE_LABELS: dict[str, str] = {
     "MessageParticipant":          "Play Message",
@@ -145,7 +145,7 @@ SET_ATTR_TYPES  = {"UpdateContactAttributes", "SetAttributes"}
 TRANSFER_TYPES  = {"TransferContactToFlow", "TransferToFlow", "InvokeFlowModule"}
 
 
-# ── Shared helpers ─────────────────────────────────────────────────────────────
+# -- Shared helpers -------------------------------------------------------------
 
 def node_id(uid: str) -> str:
     return "n" + re.sub(r"[^a-zA-Z0-9]", "_", uid)
@@ -178,7 +178,7 @@ def _he(s) -> str:
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
-# ── Cache loading ──────────────────────────────────────────────────────────────
+# -- Cache loading --------------------------------------------------------------
 
 def load_flow_cache(instance_id: str) -> tuple[dict[str, dict], dict[str, dict]]:
     """Returns (by_id, by_name_lower) — two indexes into the cached envelopes."""
@@ -219,7 +219,7 @@ def find_flow(name_or_id: str, by_id: dict, by_name: dict) -> dict | None:
     return None
 
 
-# ── Simulation state ───────────────────────────────────────────────────────────
+# -- Simulation state -----------------------------------------------------------
 
 @dataclass
 class SimState:
@@ -246,7 +246,7 @@ class Step:
     transfer_target: str = ""
 
 
-# ── Expression resolution ──────────────────────────────────────────────────────
+# -- Expression resolution ------------------------------------------------------
 
 _ATTR_RE = re.compile(r'\$\.Attributes\.([a-zA-Z0-9_]+)')
 _EXT_RE  = re.compile(r'\$\.External\.([a-zA-Z0-9_]+)')
@@ -262,7 +262,7 @@ def resolve(expr, state: SimState) -> str:
     return s
 
 
-# ── Condition evaluation ───────────────────────────────────────────────────────
+# -- Condition evaluation -------------------------------------------------------
 
 def evaluate(value: str, operator: str, operands: list[str]) -> bool:
     if not operands:
@@ -298,7 +298,7 @@ def evaluate(value: str, operator: str, operands: list[str]) -> bool:
     return False
 
 
-# ── Interactive prompts ────────────────────────────────────────────────────────
+# -- Interactive prompts --------------------------------------------------------
 
 def prompt_choice(label: str, options: list[str]) -> str:
     opts = "/".join(options) if options else "free input"
@@ -325,7 +325,7 @@ def prompt_bool(label: str, default: bool = True) -> bool:
     return val in ("y", "yes", "1", "true")
 
 
-# ── Block execution ────────────────────────────────────────────────────────────
+# -- Block execution ------------------------------------------------------------
 
 def execute_block(
     action: dict,
@@ -349,24 +349,24 @@ def execute_block(
     conditions   = trans.get("Conditions") or []
     error_next   = errors[0].get("NextAction", "") if errors else ""
 
-    # ── Terminal ──────────────────────────────────────────────────────────────
+    # -- Terminal --------------------------------------------------------------
     if btype in TERMINAL_TYPES:
         if btype == "TransferContactToQueue":
             q = (params.get("QueueId") or
                  (params.get("Queue") or {}).get("Id") or
                  state.queue or "configured queue")
-            return "", "", f"→ Queue: {q}", True, ""
+            return "", "", f"-> Queue: {q}", True, ""
         if btype == "DisconnectParticipant":
             return "", "", "Contact disconnected", True, ""
         return "", "", "Flow execution ended", True, ""
 
-    # ── Flow transfer ─────────────────────────────────────────────────────────
+    # -- Flow transfer ---------------------------------------------------------
     if btype in TRANSFER_TYPES:
         target = (params.get("ContactFlowId") or
                   params.get("FlowModuleId") or "")
-        return "", "→ sub-flow", f"Transfer to flow: {target[:20] or '?'}", False, target
+        return "", "-> sub-flow", f"Transfer to flow: {target[:20] or '?'}", False, target
 
-    # ── Set attributes ────────────────────────────────────────────────────────
+    # -- Set attributes --------------------------------------------------------
     if btype in SET_ATTR_TYPES:
         attrs = params.get("Attributes") or {}
         parts = []
@@ -376,14 +376,14 @@ def execute_block(
             parts.append(f"{key} = '{resolved}'")
         return default_next, "", "SET " + (", ".join(parts) or "(none)"), False, ""
 
-    # ── Set queue ─────────────────────────────────────────────────────────────
+    # -- Set queue -------------------------------------------------------------
     if btype == "SetQueue":
         q_id = (params.get("QueueId") or
                 (params.get("Queue") or {}).get("Id") or "")
         state.queue = q_id
-        return default_next, "", f"Queue → {q_id or '?'}", False, ""
+        return default_next, "", f"Queue -> {q_id or '?'}", False, ""
 
-    # ── Check attribute / Compare ─────────────────────────────────────────────
+    # -- Check attribute / Compare ---------------------------------------------
     if btype in ("CheckAttribute", "CheckContactAttributes", "Compare"):
         cmp_expr = (params.get("ComparisonValue") or
                     params.get("Attribute") or
@@ -395,10 +395,10 @@ def execute_block(
             if evaluate(resolved, c.get("Operator", "Equals"), operands):
                 label = _cond_label(c)
                 return (cond.get("NextAction", ""), label,
-                        f"'{cmp_expr}' = '{resolved}' → {label}", False, "")
-        return default_next, "no match", f"'{cmp_expr}' = '{resolved}' → no match", False, ""
+                        f"'{cmp_expr}' = '{resolved}' -> {label}", False, "")
+        return default_next, "no match", f"'{cmp_expr}' = '{resolved}' -> no match", False, ""
 
-    # ── Check hours of operation ──────────────────────────────────────────────
+    # -- Check hours of operation ----------------------------------------------
     if btype == "CheckHoursOfOperation":
         hoo_id = params.get("HoursOfOperationId") or ""
         mock   = scenario.get("hours_mocks", {}).get(hoo_id)
@@ -422,7 +422,7 @@ def execute_block(
         else:
             return error_next or default_next, "Out of Hours", "Out of Hours", False, ""
 
-    # ── Check staffing ────────────────────────────────────────────────────────
+    # -- Check staffing --------------------------------------------------------
     if btype in ("CheckStaffing", "CheckStaffingStatus"):
         q_id = params.get("QueueId") or ""
         mock = scenario.get("staffing_mocks", {}).get(q_id)
@@ -445,7 +445,7 @@ def execute_block(
         else:
             return error_next or default_next, "Not Staffed", "Not Staffed", False, ""
 
-    # ── Lambda ────────────────────────────────────────────────────────────────
+    # -- Lambda ----------------------------------------------------------------
     if btype in LAMBDA_TYPES:
         arn     = (params.get("LambdaFunctionARN") or params.get("FunctionArn") or
                    params.get("ResourceId") or "")
@@ -456,11 +456,11 @@ def execute_block(
         state.external.update(mock_attrs)
 
         if result == "Success":
-            return default_next, "Success", f"Lambda '{fn_name}' → Success", False, ""
+            return default_next, "Success", f"Lambda '{fn_name}' -> Success", False, ""
         else:
-            return error_next or default_next, "Error", f"Lambda '{fn_name}' → Error", False, ""
+            return error_next or default_next, "Error", f"Lambda '{fn_name}' -> Error", False, ""
 
-    # ── DTMF / voice input ────────────────────────────────────────────────────
+    # -- DTMF / voice input ----------------------------------------------------
     if btype == "GetUserInput":
         valid_options = sorted({
             str(op)
@@ -494,13 +494,13 @@ def execute_block(
             if input_val in operands:
                 return cond.get("NextAction", ""), f"Input: {input_val}", f"Input: {input_val}", False, ""
 
-        return default_next, f"Input: {input_val} (no match)", f"Input: {input_val} → no match", False, ""
+        return default_next, f"Input: {input_val} (no match)", f"Input: {input_val} -> no match", False, ""
 
-    # ── All other blocks — just continue ─────────────────────────────────────
+    # -- All other blocks — just continue -------------------------------------
     return default_next, "", "", False, ""
 
 
-# ── Simulation loop ────────────────────────────────────────────────────────────
+# -- Simulation loop ------------------------------------------------------------
 
 MAX_DEPTH  = 12
 MAX_STEPS  = 200
@@ -616,10 +616,10 @@ def simulate(
     return path, state
 
 
-# ── Invocation label map ──────────────────────────────────────────────────────
+# -- Invocation label map ------------------------------------------------------
 
 def _invocation_labels(path: list[Step]) -> dict[int, str]:
-    """Map invocation number → display label, adding (2)/(3) suffixes for repeated flows."""
+    """Map invocation number -> display label, adding (2)/(3) suffixes for repeated flows."""
     seen: list[tuple[int, str]] = []
     seen_keys: set[tuple[int, str]] = set()
     for s in path:
@@ -641,7 +641,7 @@ def _invocation_labels(path: list[Step]) -> dict[int, str]:
     return result
 
 
-# ── Text output ────────────────────────────────────────────────────────────────
+# -- Text output ----------------------------------------------------------------
 
 _KIND_COLOR = {
     "Lambda":           "\033[33m",   # yellow
@@ -673,7 +673,7 @@ def print_trace(path: list[Step], state: SimState, scenario: dict) -> None:
     for i, step in enumerate(path, 1):
         if step.invocation != cur_inv:
             cur_inv = step.invocation
-            print(f"  {_DIM}── {inv_labels.get(cur_inv, step.flow_name)} ──{_RESET}")
+            print(f"  {_DIM}-- {inv_labels.get(cur_inv, step.flow_name)} --{_RESET}")
 
         color = _KIND_COLOR.get(step.type_label, "")
         tl    = f"{color}{step.type_label or step.block_type:<18}{_RESET}"
@@ -697,7 +697,7 @@ def print_trace(path: list[Step], state: SimState, scenario: dict) -> None:
     print()
 
 
-# ── HTML generation ────────────────────────────────────────────────────────────
+# -- HTML generation ------------------------------------------------------------
 
 def _build_graph(content: dict) -> tuple[dict, list, str]:
     """Minimal graph builder (mirrors flow_to_chart.py's build_graph)."""
@@ -819,7 +819,7 @@ def build_html(path: list[Step], state: SimState, scenario: dict, by_id: dict, b
             "elements":   elements,
         })
 
-    # ── Step trace HTML ───────────────────────────────────────────────────────
+    # -- Step trace HTML -------------------------------------------------------
     step_rows = []
     cur_inv = None
     for i, step in enumerate(path):
@@ -847,7 +847,7 @@ def build_html(path: list[Step], state: SimState, scenario: dict, by_id: dict, b
   </div>
 </div>""")
 
-    # ── Scenario summary ──────────────────────────────────────────────────────
+    # -- Scenario summary ------------------------------------------------------
     cp = scenario.get("call_parameters") or {}
     ani  = _he(cp.get("ani") or "(unknown)")
     dnis = _he(cp.get("dnis") or "(unknown)")
@@ -855,7 +855,7 @@ def build_html(path: list[Step], state: SimState, scenario: dict, by_id: dict, b
     tm   = _he(cp.get("simulated_time") or "")
     final_queue = _he(state.queue or "none")
 
-    # ── Tab buttons ───────────────────────────────────────────────────────────
+    # -- Tab buttons -----------------------------------------------------------
     tab_buttons = "".join(
         f'<button class="tab-btn{" active" if i == 0 else ""}" onclick="showTab({i})">{_he(fg["tab_label"])}</button>'
         for i, fg in enumerate(flow_graphs)
@@ -1074,7 +1074,7 @@ document.addEventListener('keydown', e => {{
   if (e.key === 'ArrowUp')   {{ e.preventDefault(); activateStep(activeStepIdx - 1, true); }}
 }});
 
-// Node click in graph → zoom to that node
+// Node click in graph -> zoom to that node
 function wireNodeClick(cy) {{
   cy.on('tap', 'node', function(e) {{
     focusNode(cy, e.target.id(), false);
@@ -1124,7 +1124,7 @@ if (flowGraphs.length > 0) {{
 </html>"""
 
 
-# ── JSON output ────────────────────────────────────────────────────────────────
+# -- JSON output ----------------------------------------------------------------
 
 def to_json(path: list[Step], state: SimState, scenario: dict) -> dict:
     cp = scenario.get("call_parameters") or {}
@@ -1149,7 +1149,7 @@ def to_json(path: list[Step], state: SimState, scenario: dict) -> dict:
     }
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# -- Main ----------------------------------------------------------------------
 
 def main():
     if "--man" in sys.argv:
@@ -1212,7 +1212,7 @@ examples:
             print_trace(path, state, scenario)
             sys.stdout = _orig
             Path(args.output).write_text(re.sub(r"\x1b\[[0-9;]*[mK]", "", buf.getvalue()))
-            print(f"  Trace saved → {args.output}")
+            print(f"  Trace saved -> {args.output}")
         else:
             print_trace(path, state, scenario)
 
@@ -1220,12 +1220,12 @@ examples:
         SIMULATIONS_DIR.mkdir(parents=True, exist_ok=True)
         if args.html:
             p_html = Path(args.html)
-            # Bare filename with no directory → put it in Simulations/
+            # Bare filename with no directory -> put it in Simulations/
             html_path = SIMULATIONS_DIR / p_html.name if not p_html.parent.name else p_html
         else:
             html_path = SIMULATIONS_DIR / ("sim_" + re.sub(r"[^a-zA-Z0-9_-]", "_", args.flow) + ".html")
         Path(html_path).write_text(build_html(path, state, scenario, by_id, by_name), encoding="utf-8")
-        print(f"  HTML saved     → {html_path}")
+        print(f"  HTML saved     -> {html_path}")
 
 
 if __name__ == "__main__":

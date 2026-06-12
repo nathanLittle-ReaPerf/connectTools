@@ -268,7 +268,7 @@ def _val(obj: dict, *keys: str, default=None):
 
 
 def _extract_set_attributes(event: dict) -> dict[str, str]:
-    """Extract attribute key→value pairs from an UpdateContactAttributes block."""
+    """Extract attribute key->value pairs from an UpdateContactAttributes block."""
     # Parameters.Attributes is a dict, or Parameters.ContactData.Attributes
     attrs = {}
     params = event.get("Parameters", {}) or {}
@@ -422,7 +422,7 @@ def reconstruct_contacts(events: list[dict]) -> dict[str, dict]:
                 "dnis": "",
                 "channel": "",
                 "initial_flow": "",
-                "attr_sources": {},  # attr_key → "flow" or lambda function name
+                "attr_sources": {},  # attr_key -> "flow" or lambda function name
             }
 
         c = contacts[cid]
@@ -514,7 +514,7 @@ def _journey_key(contact: dict) -> str:
         f = step.get("flow", "")
         if f and (not flows_seen or flows_seen[-1] != f):
             flows_seen.append(f)
-    return " → ".join(flows_seen)
+    return " -> ".join(flows_seen)
 
 
 def _anonymize_value(key: str, value: str) -> str:
@@ -622,8 +622,8 @@ def build_scenario_from_contact(contact: dict, anonymize: bool = False) -> dict:
         ani = _anonymize_value("ani", ani)
         dnis = _anonymize_value("dnis", dnis)
 
-    flows = journey_key.split(" → ")
-    _name = flows[0] if len(flows) == 1 else f"{flows[0]} → {flows[-1]}"
+    flows = journey_key.split(" -> ")
+    _name = flows[0] if len(flows) == 1 else f"{flows[0]} -> {flows[-1]}"
 
     return {
         "_name": _name,
@@ -1190,8 +1190,8 @@ examples:
             # Use the most recent contact as the representative
             rep = sorted(group, key=lambda c: c["contact_id"])[-1]
             scenario = build_scenario_from_contact(rep, args.anonymize)
-            flows = journey_key.split(" → ")
-            journey_label = flows[0] if len(flows) == 1 else f"{flows[0]} → {flows[-1]}"
+            flows = journey_key.split(" -> ")
+            journey_label = flows[0] if len(flows) == 1 else f"{flows[0]} -> {flows[-1]}"
             base_name = f"{args.name} {rank}" if args.name else f"Journey {rank} — {journey_label}"
             scenario["_name"] = base_name
             scenario["_note"] = (

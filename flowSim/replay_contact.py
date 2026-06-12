@@ -402,7 +402,7 @@ def main() -> None:
     cid8 = args.contact_id[:8]
     scenario_path = SCENARIOS_DIR / f"replay_{cid8}.json"
     scenario_path.write_text(json.dumps(scenario, indent=2), encoding="utf-8")
-    print(f"\n  Scenario → {scenario_path}")
+    print(f"\n  Scenario -> {scenario_path}")
 
     if args.no_html:
         print("  Skipping HTML (--no-html).")

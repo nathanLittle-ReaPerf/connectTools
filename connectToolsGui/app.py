@@ -123,6 +123,29 @@ def set_last_profile(profile_name: str):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# HTML to PNG conversion
+# ══════════════════════════════════════════════════════════════════════════════
+
+def html_to_png(html_content: str, png_path: Path) -> bool:
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return False
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={"width": 1400, "height": 900})
+            page.set_content(html_content)
+            page.wait_for_load_state("networkidle")
+            page.screenshot(path=str(png_path), full_page=True)
+            browser.close()
+        return True
+    except Exception:
+        return False
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # AWS credentials file helpers
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -517,7 +540,7 @@ def _render_overview(data: dict):
         "Disconnect reason": contact.get("DisconnectReason"),
         "Duration":          _fmt_dur(contact.get("InitiationTimestamp"),
                                        contact.get("DisconnectTimestamp")),
-        "Queue":             names.get("queue") or (contact.get("QueueInfo") or {}).get("Id"),
+        "Queue":             names.get("queue") or (contact.get("QueueInfo") or {}).get("Name") or (contact.get("QueueInfo") or {}).get("Id"),
         "Agent":             names.get("agent") or (contact.get("AgentInfo") or {}).get("Id"),
         "Customer endpoint": _endpoint_str(contact.get("CustomerEndpoint")),
         "Previous contact":  contact.get("PreviousContactId"),
@@ -1008,7 +1031,7 @@ def page_contact_search(active_name: str, active_meta: dict):
             "Initiated":   init_ts.strftime("%Y-%m-%d %H:%M:%S") if init_ts else "",
             "Duration":    f"{dur_s // 60}m {dur_s % 60}s" if dur_s is not None else "",
             "Disconnect":  c.get("DisconnectReason", ""),
-            "Queue":       qi.get("Id", ""),
+            "Queue":       qi.get("Name", qi.get("Id", "")),
         })
 
     df = pd.DataFrame(rows)
@@ -1688,8 +1711,6 @@ def page_flow_replay(active_name: str, active_meta: dict):
             "--flow",        initial_flow,
             "--scenario",    str(scenario_path),
             "--html",        str(html_path),
-            "--region",      region,
-            "--profile",     active_name,
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
@@ -1712,12 +1733,35 @@ def page_flow_replay(active_name: str, active_meta: dict):
     import streamlit.components.v1 as components
     components.html(html_content, height=720, scrolling=False)
 
-    st.download_button(
-        "⬇ Download HTML",
-        data=html_content,
-        file_name=f"replay_{cid8}.html",
-        mime="text/html",
-    )
+    col1, col2 = st.columns(2)
+    with col1:
+        st.download_button(
+            "⬇ Download HTML",
+            data=html_content,
+            file_name=f"replay_{cid8}.html",
+            mime="text/html",
+        )
+    with col2:
+        if st.button("📸 Generate PNG"):
+            png_path = Path(st.session_state.get("_flow_replay_png_path", ""))
+            if not png_path.exists():
+                with st.spinner("Rendering PNG..."):
+                    sims_dir = FLOWSIM_DIR / "Simulations"
+                    png_path = sims_dir / f"replay_{cid8}.png"
+                    if html_to_png(html_content, png_path):
+                        st.session_state["_flow_replay_png_path"] = str(png_path)
+                        st.rerun()
+                    else:
+                        st.error("Failed to generate PNG. Is Playwright installed? Try: pip install playwright && playwright install")
+
+            if png_path.exists():
+                png_data = png_path.read_bytes()
+                st.download_button(
+                    "💾 Save PNG",
+                    data=png_data,
+                    file_name=f"replay_{cid8}.png",
+                    mime="image/png",
+                )
 
     # Quick links
     lc1, lc2 = st.columns(2)

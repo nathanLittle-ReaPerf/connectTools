@@ -215,7 +215,7 @@ def fetch_and_cache(client, instance_id: str) -> list[dict]:
         if env:
             envelopes.append(env)
     _save_cache(instance_id, envelopes)
-    print(f"  Cached {len(envelopes)} flows → {_cache_dir(instance_id)}", file=sys.stderr)
+    print(f"  Cached {len(envelopes)} flows -> {_cache_dir(instance_id)}", file=sys.stderr)
     return envelopes
 
 
@@ -701,7 +701,7 @@ def print_summary(map_data: dict) -> None:
         for arn in sorted(lambdas.keys()):
             fn = arn.split(":")[-1] if ":" in arn else arn
             flows = ", ".join(lambdas[arn])
-            print(f"    {fn}  →  {flows}")
+            print(f"    {fn}  ->  {flows}")
         print()
 
 
@@ -761,19 +761,19 @@ examples:
 
     if args.map:
         Path(args.map).write_text(json.dumps(map_data, indent=2))
-        print(f"  JSON map saved → {args.map}")
+        print(f"  JSON map saved -> {args.map}")
 
     if not args.no_html:
         FLOW_MAPS_DIR.mkdir(parents=True, exist_ok=True)
         html_path = args.html or str(FLOW_MAPS_DIR / f"flow_map_{instance_id}.html")
         Path(html_path).write_text(build_html(map_data), encoding="utf-8")
-        print(f"  HTML report    → {html_path}")
+        print(f"  HTML report    -> {html_path}")
 
     if not args.no_scenario:
         SCENARIOS_DIR.mkdir(parents=True, exist_ok=True)
         tmpl_path = args.scenario or str(SCENARIOS_DIR / f"scenario_{instance_id}.json")
         Path(tmpl_path).write_text(json.dumps(build_scenario_template(map_data), indent=2))
-        print(f"  Scenario tmpl  → {tmpl_path}")
+        print(f"  Scenario tmpl  -> {tmpl_path}")
 
     print()
 

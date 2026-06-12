@@ -292,7 +292,7 @@ def print_list(events: list[dict], seen: set[str]) -> None:
                 pass
         ts = evs[0].get("timestamp") or 0
         ts_str = datetime.fromtimestamp(ts / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
-        flow_str = " → ".join(flows[:4]) + (" …" if len(flows) > 4 else "")
+        flow_str = " -> ".join(flows[:4]) + (" …" if len(flows) > 4 else "")
         print(f"  {cid[:8]}…  {ts_str}  {flow_str}")
     print()
 
@@ -356,7 +356,7 @@ def main() -> None:
     print(f"  Instance : {args.instance_id}")
     if args.contact_id:
         print(f"  Contact  : {args.contact_id}")
-    print(f"  Window   : {start.strftime('%Y-%m-%d %H:%M')} → {end.strftime('%Y-%m-%d %H:%M')} UTC")
+    print(f"  Window   : {start.strftime('%Y-%m-%d %H:%M')} -> {end.strftime('%Y-%m-%d %H:%M')} UTC")
     if not args.contact_id:
         print(f"  Max      : {args.max if args.max > 0 else 'unlimited'} contacts")
     print()
@@ -420,7 +420,7 @@ def main() -> None:
 
     size_kb = out_path.stat().st_size // 1024
     print()
-    print(f"  Saved → {out_path}  ({size_kb} KB)")
+    print(f"  Saved -> {out_path}  ({size_kb} KB)")
     print()
     print(f"  Build scenarios:")
     print(f"    python scenario_from_logs.py \"{out_path}\"")
