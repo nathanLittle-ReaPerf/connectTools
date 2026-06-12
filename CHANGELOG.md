@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-11
+- **flow_analyze.py** — New unified flow analysis tool. Merges `flow_scan` (hard errors: broken refs, dead ends, missing handlers) and `flow_optimize` (rule-based suggestions: UX, reliability, structure, maintainability) into one script. Default runs both passes in a single `DescribeContactFlow` call per flow. `--scan` / `--optimize` flags to restrict to one pass. Replaces both tools in the Flows menu.
+- **contact_investigator.py** — New unified contact investigation tool. Consolidates `contact_inspect`, `contact_timeline`, `lambda_tracer`, `contact_recordings`, and `contact_logs` into one script with section flags (`--overview`, `--timeline`, `--lambda`, `--recordings`, `--logs`, `--all`). Shared API calls (DescribeContact, CloudWatch log events, Contact Lens) are made once and reused across sections. Added as "Contact Investigator" at the top of the Contacts group in the toolbox.
+
 ## 2026-05-11
 - **flow_walk.py** — Step rewind: type `back` or `back N` at any interactive prompt to restore full walker state (SimState + WalkSession) to N steps back. Snapshots taken before each block; rewind propagates across sub-flow boundaries via `_RewindRequest` exception.
 
