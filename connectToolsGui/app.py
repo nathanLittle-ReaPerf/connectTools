@@ -137,7 +137,14 @@ def html_to_png(html_content: str, png_path: Path, tab_selector: str = None) -> 
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(viewport={"width": 1400, "height": 900})
             page.set_content(html_content)
-            page.wait_for_load_state("networkidle")
+
+            # Wait for networkidle, then give Cytoscape time to render
+            try:
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except:
+                pass  # Continue even if timeout
+
+            page.wait_for_timeout(2000)  # Extra time for JS rendering
 
             # Click tab if selector provided
             if tab_selector:
@@ -147,7 +154,9 @@ def html_to_png(html_content: str, png_path: Path, tab_selector: str = None) -> 
             page.screenshot(path=str(png_path), full_page=True)
             browser.close()
         return True
-    except Exception:
+    except Exception as e:
+        import sys
+        print(f"PNG generation error: {e}", file=sys.stderr)
         return False
 
 
@@ -163,7 +172,14 @@ def html_export_all_tabs(html_content: str, zip_path: Path) -> bool:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(viewport={"width": 1400, "height": 900})
             page.set_content(html_content)
-            page.wait_for_load_state("networkidle")
+
+            # Wait for networkidle, then give Cytoscape time to render
+            try:
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except:
+                pass
+
+            page.wait_for_timeout(2000)
 
             # Find all tab buttons (Cytoscape.js uses data-tab or similar)
             tabs = page.query_selector_all("button[data-tab], .tab-button, [role='tab']")
@@ -183,7 +199,7 @@ def html_export_all_tabs(html_content: str, zip_path: Path) -> bool:
             with zipfile.ZipFile(str(zip_path), 'w') as zf:
                 for i, tab in enumerate(tabs):
                     tab.click()
-                    page.wait_for_timeout(500)
+                    page.wait_for_timeout(1000)  # Longer wait for tab switch
 
                     tab_name = tab.text_content().strip() or f"flow_{i}"
                     temp_png = zip_path.parent / f"_temp_tab_{i}.png"
@@ -193,7 +209,9 @@ def html_export_all_tabs(html_content: str, zip_path: Path) -> bool:
 
             browser.close()
         return True
-    except Exception:
+    except Exception as e:
+        import sys
+        print(f"Tab export error: {e}", file=sys.stderr)
         return False
 
 
