@@ -126,7 +126,7 @@ def set_last_profile(profile_name: str):
 # HTML to PNG conversion
 # ══════════════════════════════════════════════════════════════════════════════
 
-def html_to_png(html_content: str, png_path: Path) -> bool:
+def html_to_png(html_content: str, png_path: Path, tab_selector: str = None) -> bool:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -138,7 +138,59 @@ def html_to_png(html_content: str, png_path: Path) -> bool:
             page = browser.new_page(viewport={"width": 1400, "height": 900})
             page.set_content(html_content)
             page.wait_for_load_state("networkidle")
+
+            # Click tab if selector provided
+            if tab_selector:
+                page.click(tab_selector)
+                page.wait_for_timeout(500)
+
             page.screenshot(path=str(png_path), full_page=True)
+            browser.close()
+        return True
+    except Exception:
+        return False
+
+
+def html_export_all_tabs(html_content: str, zip_path: Path) -> bool:
+    try:
+        from playwright.sync_api import sync_playwright
+        import zipfile
+    except ImportError:
+        return False
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={"width": 1400, "height": 900})
+            page.set_content(html_content)
+            page.wait_for_load_state("networkidle")
+
+            # Find all tab buttons (Cytoscape.js uses data-tab or similar)
+            tabs = page.query_selector_all("button[data-tab], .tab-button, [role='tab']")
+
+            # If no tabs found, just export the whole page
+            if not tabs:
+                temp_png = zip_path.parent / f"_temp_full.png"
+                page.screenshot(path=str(temp_png), full_page=True)
+
+                with zipfile.ZipFile(str(zip_path), 'w') as zf:
+                    zf.write(str(temp_png), "flow_diagram.png")
+                temp_png.unlink()
+                browser.close()
+                return True
+
+            # Export each tab
+            with zipfile.ZipFile(str(zip_path), 'w') as zf:
+                for i, tab in enumerate(tabs):
+                    tab.click()
+                    page.wait_for_timeout(500)
+
+                    tab_name = tab.text_content().strip() or f"flow_{i}"
+                    temp_png = zip_path.parent / f"_temp_tab_{i}.png"
+                    page.screenshot(path=str(temp_png), full_page=True)
+                    zf.write(str(temp_png), f"{tab_name}.png")
+                    temp_png.unlink()
+
             browser.close()
         return True
     except Exception:
@@ -1733,7 +1785,7 @@ def page_flow_replay(active_name: str, active_meta: dict):
     import streamlit.components.v1 as components
     components.html(html_content, height=720, scrolling=False)
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.download_button(
             "⬇ Download HTML",
@@ -1761,6 +1813,27 @@ def page_flow_replay(active_name: str, active_meta: dict):
                     data=png_data,
                     file_name=f"replay_{cid8}.png",
                     mime="image/png",
+                )
+    with col3:
+        if st.button("📦 Export All Tabs"):
+            zip_path = Path(st.session_state.get("_flow_replay_zip_path", ""))
+            if not zip_path.exists():
+                with st.spinner("Rendering all tabs..."):
+                    sims_dir = FLOWSIM_DIR / "Simulations"
+                    zip_path = sims_dir / f"replay_{cid8}_all_flows.zip"
+                    if html_export_all_tabs(html_content, zip_path):
+                        st.session_state["_flow_replay_zip_path"] = str(zip_path)
+                        st.rerun()
+                    else:
+                        st.error("Failed to export tabs. Is Playwright installed? Try: pip install playwright && playwright install")
+
+            if zip_path.exists():
+                zip_data = zip_path.read_bytes()
+                st.download_button(
+                    "💾 Save ZIP",
+                    data=zip_data,
+                    file_name=f"replay_{cid8}_flows.zip",
+                    mime="application/zip",
                 )
 
     # Quick links
