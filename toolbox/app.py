@@ -60,19 +60,40 @@ def _ct_save(data: dict):
 
 
 def load_profiles() -> dict:
-    """Returns {profile_name: {display_name, instance_id, region, added_at}}"""
+    """Returns {profile_name: {display_name, instance_id, region, log_group, added_at}}"""
     return _ct_load().get(GUI_PROFILES_KEY, {})
 
 
-def save_profile(profile_name: str, display_name: str, instance_id: str, region: str):
-    cfg = _ct_load()
+def save_profile(profile_name: str, display_name: str, instance_id: str,
+                 region: str, log_group: str = ""):
+    cfg      = _ct_load()
+    existing = cfg.get(GUI_PROFILES_KEY, {}).get(profile_name, {})
     cfg.setdefault(GUI_PROFILES_KEY, {})[profile_name] = {
         "display_name": display_name.strip() or profile_name,
         "instance_id":  instance_id.strip(),
         "region":       region.strip(),
-        "added_at":     dt.datetime.now(dt.timezone.utc).isoformat(),
+        "log_group":    log_group.strip() or existing.get("log_group", ""),
+        "added_at":     existing.get("added_at") or dt.datetime.now(dt.timezone.utc).isoformat(),
     }
     _ct_save(cfg)
+
+
+def get_profile_log_group(profile_name: str, instance_id: str) -> str:
+    """Return log group for this profile; fall back to per-instance ct_config entry."""
+    profile_lg = load_profiles().get(profile_name, {}).get("log_group", "")
+    return profile_lg or ctcfg.get_log_group(instance_id)
+
+
+def set_profile_log_group(profile_name: str, instance_id: str, log_group: str):
+    """Save log group to the profile and to ct_config (for CLI tool compatibility)."""
+    lg = log_group.strip()
+    cfg = _ct_load()
+    if profile_name in cfg.get(GUI_PROFILES_KEY, {}):
+        cfg[GUI_PROFILES_KEY][profile_name]["log_group"] = lg
+        _ct_save(cfg)
+    if instance_id and lg:
+        cfg2 = ctcfg.load()
+        ctcfg.set_log_group(cfg2, instance_id, lg)
 
 
 def delete_profile_meta(profile_name: str):
@@ -353,26 +374,33 @@ def page_credentials():
         badge = ("🟢 Valid" if valid else ("🔴 Expired" if valid is False else "⚪ Unknown"))
 
         with st.expander(f"{badge}  **{display_name}**  ·  `{profile_name}`", expanded=False):
+
+            # ── Info + quick actions ──────────────────────────────────────────
             info_col, action_col = st.columns([3, 1])
             with info_col:
+                # Show current key ID prefix so user can confirm they're updating the right creds
+                creds    = read_aws_creds()
+                cur_kid  = creds[profile_name].get("aws_access_key_id", "") if profile_name in creds else ""
+                kid_hint = f"`{cur_kid[:8]}…`" if cur_kid else "*(not found in credentials file)*"
                 st.markdown(
                     f"**Instance ID:** `{instance_id or '—'}`  \n"
                     f"**Region:** `{region or '—'}`  \n"
                     f"**Added:** {added_at[:10] if added_at else '—'}  \n"
-                    f"**Credential detail:** {vdetail or '—'}"
+                    f"**Current key ID:** {kid_hint}  \n"
+                    f"**Status:** {vdetail or '—'}"
                 )
             with action_col:
-                if st.button("Check", key=f"chk_{profile_name}"):
+                if st.button("Check", key=f"chk_{profile_name}", use_container_width=True):
                     check_profile.clear()
                     with st.spinner("Checking…"):
                         result = check_profile(profile_name)
                     st.session_state[vkey] = result
                     st.rerun()
-                if st.button("🗑 Delete", key=f"del_{profile_name}"):
+                if st.button("🗑 Delete", key=f"del_{profile_name}", use_container_width=True):
                     st.session_state[f"confirm_delete_{profile_name}"] = True
 
             if st.session_state.get(f"confirm_delete_{profile_name}"):
-                st.warning(f"Delete profile **{display_name}**? This removes it from `~/.aws/credentials`.")
+                st.warning(f"Delete **{display_name}**? This also removes it from `~/.aws/credentials`.")
                 c1, c2 = st.columns(2)
                 with c1:
                     if st.button("Yes, delete", key=f"yes_del_{profile_name}", type="primary"):
@@ -388,18 +416,73 @@ def page_credentials():
 
             st.divider()
 
-            # ── Edit form ─────────────────────────────────────────────────────
+            # ── Refresh credentials ───────────────────────────────────────────
+            # Auto-open when credentials are known expired
+            creds_expired = (valid is False)
+            with st.expander(
+                "🔄 Refresh credentials" + (" ← expired" if creds_expired else ""),
+                expanded=creds_expired,
+            ):
+                st.caption(
+                    "Paste individual values from the AWS access portal "
+                    "(**Access keys → Option 3**), or fill only the fields that changed. "
+                    "Leave a field blank to keep its current value."
+                )
+                with st.form(key=f"refresh_creds_{profile_name}"):
+                    new_kid = st.text_input(
+                        "AWS Access Key ID",
+                        placeholder="ASIA…",
+                        help="Starts with ASIA for temporary/SSO credentials",
+                    )
+                    new_secret = st.text_input(
+                        "AWS Secret Access Key",
+                        placeholder="Leave blank to keep current",
+                        type="password",
+                    )
+                    new_token = st.text_area(
+                        "AWS Session Token",
+                        placeholder="IQoJb3Jp… (leave blank to keep current)",
+                        height=100,
+                    )
+                    if st.form_submit_button("💾 Update credentials", type="primary"):
+                        if not any([new_kid.strip(), new_secret.strip(), new_token.strip()]):
+                            st.warning("Fill in at least one field to update.")
+                        else:
+                            existing = read_aws_creds()
+                            sec = existing[profile_name] if profile_name in existing else {}
+                            write_aws_creds(
+                                profile_name,
+                                new_kid.strip()    or sec.get("aws_access_key_id", ""),
+                                new_secret.strip() or sec.get("aws_secret_access_key", ""),
+                                new_token.strip()  or sec.get("aws_session_token", ""),
+                            )
+                            st.session_state.pop(vkey, None)
+                            check_profile.clear()
+                            st.success("Credentials updated.")
+                            st.rerun()
+
+            st.divider()
+
+            # ── Settings edit form ────────────────────────────────────────────
             with st.form(key=f"edit_{profile_name}"):
                 st.caption("Edit settings")
                 ec1, ec2, ec3 = st.columns(3)
                 with ec1:
-                    new_dn  = st.text_input("Display name",   value=display_name)
+                    new_dn  = st.text_input("Display name",  value=display_name)
                 with ec2:
-                    new_iid = st.text_input("Instance ID",    value=instance_id)
+                    new_iid = st.text_input("Instance ID",   value=instance_id)
                 with ec3:
-                    new_reg = st.text_input("Region",         value=region)
+                    new_reg = st.text_input("Region",        value=region)
+                new_lg = st.text_input(
+                    "Default log group",
+                    value=meta.get("log_group", ""),
+                    placeholder="/aws/connect/<alias>",
+                    help="Pre-fills the log group field on Contact Investigator and Log Insights",
+                )
                 if st.form_submit_button("Save changes"):
-                    save_profile(profile_name, new_dn, new_iid, new_reg)
+                    save_profile(profile_name, new_dn, new_iid, new_reg, new_lg)
+                    if new_lg.strip():
+                        set_profile_log_group(profile_name, new_iid.strip(), new_lg.strip())
                     st.success("Saved.")
                     st.rerun()
 
@@ -621,7 +704,7 @@ def page_contact_investigator(active_name: str, active_meta: dict):
             with lg_col:
                 log_group = st.text_input(
                     "Log group override",
-                    value=ctcfg.get_log_group(instance_override or instance_id),
+                    value=get_profile_log_group(active_name, instance_override or instance_id),
                     placeholder="/aws/connect/<alias>",
                 )
             with save_col:
@@ -682,9 +765,8 @@ def page_contact_investigator(active_name: str, active_meta: dict):
             st.error("Could not resolve Connect log group. Set it in Advanced options.")
             return
         if save_log_group and log_group_resolved:
-            cfg = ctcfg.load()
-            ctcfg.set_log_group(cfg, iid, log_group_resolved)
-            st.toast(f"Log group saved as default for this instance.", icon="✅")
+            set_profile_log_group(active_name, iid, log_group_resolved)
+            st.toast("Log group saved as default for this profile.", icon="✅")
 
     # Fetch CW events once
     cw_events = []
@@ -958,6 +1040,13 @@ def page_log_insights(active_name: str, active_meta: dict):
 
     region = active_meta.get("region", "us-east-1")
 
+    # Reset page-specific state when the active profile changes
+    if active_name != st.session_state.get("li_active_profile"):
+        st.session_state["li_active_profile"] = active_name
+        st.session_state.pop("li_log_group_val", None)
+        st.session_state["li_lg_key"] = st.session_state.get("li_lg_key", 0) + 1
+        st.session_state.pop("li_discovered", None)
+
     # ── Query selector + editor ───────────────────────────────────────────────
     queries    = _list_queries()
     NEW_LABEL  = "— New query —"
@@ -1029,7 +1118,7 @@ def page_log_insights(active_name: str, active_meta: dict):
     if "li_lg_key" not in st.session_state:
         st.session_state["li_lg_key"] = 0
 
-    saved_lg = ctcfg.get_log_group(active_meta.get("instance_id", ""))
+    saved_lg = get_profile_log_group(active_name, active_meta.get("instance_id", ""))
 
     lg_col, disc_col, def_col = st.columns([4, 1, 1])
     with lg_col:
@@ -1068,12 +1157,8 @@ def page_log_insights(active_name: str, active_meta: dict):
             help="Save this log group as the default for the active instance",
         ):
             iid = active_meta.get("instance_id", "")
-            if iid:
-                cfg = ctcfg.load()
-                ctcfg.set_log_group(cfg, iid, log_group.strip())
-                st.toast("Log group saved as default.", icon="✅")
-            else:
-                st.warning("No instance ID on this profile — can't save a default.")
+            set_profile_log_group(active_name, iid, log_group.strip())
+            st.toast("Log group saved as default for this profile.", icon="✅")
 
     tr_type = st.radio(
         "Time range", ["Relative", "Date range"],
