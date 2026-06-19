@@ -1693,7 +1693,17 @@ def page_flow_replay(active_name: str, active_meta: dict):
                f"{sum(1 for _ in flow_cache.glob('*.json'))} flow file(s) cached")
 
     # ── Save default log group ────────────────────────────────────────────────
-    current_lg = get_profile_log_group(active_name, instance_id)
+    profile_lg = load_profiles().get(active_name, {}).get("log_group", "")
+    instance_lg = ctcfg.get_log_group(instance_id)
+    current_lg = profile_lg or instance_lg
+
+    # Show which default is active
+    if current_lg:
+        source = "Profile" if profile_lg else "Instance"
+        st.caption(f"Using {source} default: `{current_lg}`")
+    else:
+        st.caption("No default log group set (will auto-discover)")
+
     lg1, lg2 = st.columns([4, 1])
     with lg1:
         new_lg = st.text_input(
