@@ -1875,7 +1875,20 @@ def page_flow_replay(active_name: str, active_meta: dict):
                f"{n_lambdas} Lambda call(s)")
 
     import streamlit.components.v1 as components
-    components.html(html_content, height=720, scrolling=False)
+
+    # Full-screen toggle
+    if "_flow_replay_fullscreen" not in st.session_state:
+        st.session_state._flow_replay_fullscreen = False
+
+    if st.button("🖥️ " + ("Exit Full Screen" if st.session_state._flow_replay_fullscreen else "Full Screen")):
+        st.session_state._flow_replay_fullscreen = not st.session_state._flow_replay_fullscreen
+        st.rerun()
+
+    # Display diagram (full-screen or normal)
+    if st.session_state._flow_replay_fullscreen:
+        components.html(html_content, height=900, scrolling=True)
+    else:
+        components.html(html_content, height=720, scrolling=False)
 
     col1, col2, col3 = st.columns(3)
     with col1:
