@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-19
+- **flow_check.py** — Multi-region/account flow comparison tool. Three modes: quick hash comparison (fastest), detailed block diffs, full flow inventory. Verify parity across dev/staging/prod or multiple AWS accounts.
+- **Flow Replay UI** — Display which log group default is active (Profile vs Instance). Add full-screen toggle for flow diagram (900px with scrolling for easier examination).
+- **Project reorganization** — Consolidated duplicate modules; toolbox versions now thin wrappers importing from lib/. Eliminated 2546 lines of duplicate code while maintaining CLI executability.
+
 ## 2026-06-12 (continued)
 - **Flow Replay** — PNG/ZIP export for flow diagrams. `📸 Generate PNG` renders the Cytoscape.js HTML diagram to a screenshot via Playwright. `📦 Export All Tabs` renders each flow tab separately and bundles them in a ZIP file. Download buttons appear after rendering completes. Setup: `pip install playwright && playwright install chromium`.
 - **Flow Replay** — Default log group now saved per-profile with `💾 Save` button. Defaults populated from profile settings; users can update without re-entering contact ID.
