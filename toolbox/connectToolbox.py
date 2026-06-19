@@ -695,6 +695,46 @@ VALID_CHANNELS_CS = ["VOICE", "CHAT", "TASK", "EMAIL"]
 
 # ── Tool: Flow Analyze ───────────────────────────────────────────────────────
 
+def tool_flow_check():
+    _header("Flow Check — Compare Across Regions/Accounts")
+
+    mode = ask_choice(
+        "Check mode",
+        ["Quick hash (fast)", "Detailed diffs", "Inventory (all flows)"],
+        default="Quick hash (fast)",
+    )
+
+    instances = []
+    while True:
+        iid = ask("Instance ID (or press Enter to finish adding)")
+        if not iid.strip():
+            break
+        region = ask("Region (e.g., us-east-1)")
+        label = ask("Label for this instance (optional)", required=False) or f"{region}"
+        instances.append(f"{iid}:{region}:{label}")
+
+    if not instances:
+        print("  No instances specified")
+        return
+
+    args = ["--instances"] + instances
+
+    if mode == "Quick hash (fast)":
+        flow_name = ask("Flow name to check")
+        args += ["--flow", flow_name]
+    elif mode == "Detailed diffs":
+        flow_name = ask("Flow name to check")
+        args += ["--flow", flow_name, "--detail"]
+    else:  # Inventory
+        args.append("--inventory")
+
+    profile = ask("AWS profile (optional)", required=False)
+    if profile:
+        args += ["--profile", profile]
+
+    _run("flow_check.py", args)
+
+
 def tool_flow_analyze():
     _header("Flow Analyze")
     source = ask_choice("Source", ["Local file", "Instance flow", "All flows"], default="Local file")
@@ -1344,6 +1384,7 @@ GROUPS = [
         ("Lambda Errors",      tool_lambda_errors,     "Aggregate Lambda errors across all contacts for a function and time window"),
     ]),
     ("Flows", [
+        ("Flow Check",            tool_flow_check,            "Compare flows across regions/accounts: quick hash, detailed diffs, or full inventory"),
         ("Flow Analyze",          tool_flow_analyze,          "Scan for errors + optimization suggestions (or either alone)"),
         ("Flow Attr Search",      tool_flow_attr_search,      "Find every SET, CHECK, and REF of a contact attribute across flows"),
         ("Flow Review (AI)",      tool_flow_review,           "AI-powered deep analysis: UX, reliability, structure, and best practices (requires API key)"),
