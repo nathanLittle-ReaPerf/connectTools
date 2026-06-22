@@ -228,7 +228,8 @@ def _divider(flow_name: str) -> None:
 def _step_header(num: int, type_label: str, block_type: str, label: str) -> None:
     color = _KIND_COLOR.get(type_label, "")
     tl    = f"{color}{(type_label or block_type):<18}{_R}"
-    print(f"  {_D}{num:>3}.{_R}  {tl}  {_B}{label}{_R}")
+    # Highlight current step with indicator
+    print(f"  {_GR}▶{_R} {_D}{num:>3}.{_R}  {tl}  {_B}{label}{_R}")
 
 
 def _detail(text: str, color: str = "") -> None:
@@ -276,6 +277,22 @@ def _detect_lambda_outputs(content: dict) -> list[str]:
         for m in _EXT_RE.finditer(json.dumps(params)):
             found.add(m.group(1))
     return sorted(found)
+
+
+# ── Branch exploration ────────────────────────────────────────────────────────
+
+def _show_branches(conditions: list, default_next: str) -> None:
+    """Show available branches at a decision point."""
+    if not conditions:
+        return
+    print(f"  {_D}Available branches:{_R}")
+    for i, cond in enumerate(conditions, 1):
+        c   = cond.get("Condition") or {}
+        lbl = _cond_label(c)
+        next_id = cond.get("NextAction", "")
+        print(f"    {i}. {lbl}")
+    if default_next:
+        print(f"    [default] -> (default branch)")
 
 
 # ── Block walker ──────────────────────────────────────────────────────────────
@@ -375,6 +392,8 @@ def _walk_block(
             if evaluate(resolved, c.get("Operator", "Equals"), ops):
                 lbl = _cond_label(c)
                 _result(f"match -> {lbl}")
+                # Show available branches for exploration
+                _show_branches(conditions, default_next)
                 return (cond.get("NextAction", ""), False, "",
                         f"'{cmp_expr}'='{resolved}' -> {lbl}", lbl)
         # Show every condition that was tested so the user can see what's in the flow
@@ -384,6 +403,7 @@ def _walk_block(
             ops = [str(o) for o in (c.get("Operands") or [])]
             _detail(f"  tested: {op} {ops}  -> no match")
         _result("no match -> default", ok=False)
+        _show_branches(conditions, default_next)
         return default_next, False, "", f"'{cmp_expr}'='{resolved}' -> no match", "no match"
 
     # ── Check hours of operation ──────────────────────────────────────────────
@@ -551,9 +571,11 @@ def _walk_block(
             ops = [str(o) for o in (c.get("Operands") or [])]
             if val in ops:
                 _result(f"Input: {val}")
+                _show_branches(conditions, default_next)
                 return (cond.get("NextAction", ""), False, "",
                         f"Input: {val}", f"Input: {val}")
         _result(f"Input: {val} (no match -> default)", ok=False)
+        _show_branches(conditions, default_next)
         return default_next, False, "", f"Input: {val} -> no match", f"Input: {val} (no match)"
 
     # ── All other blocks ──────────────────────────────────────────────────────
