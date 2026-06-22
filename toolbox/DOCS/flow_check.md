@@ -44,6 +44,24 @@ Transfer to Agent                        ✗ 2 version(s)    prod:xyz789ab, stag
 ...
 ```
 
+### Export to JSON
+```bash
+python flow_check.py --flow "Main IVR" --instances abc-123:us-east-1 xyz-789:eu-west-1 --json
+python flow_check.py --inventory --instances abc-123:us-east-1 xyz-789:eu-west-1 --json --output inventory.json
+```
+
+Output is structured JSON with results array and summary metadata — pipe to `jq` for filtering:
+```bash
+python flow_check.py --inventory --instances abc-123:us-east-1 xyz-789:eu-west-1 --json | jq '.results[] | select(.match_status == "DIFF")'
+```
+
+### Export to CSV
+```bash
+python flow_check.py --inventory --instances abc-123:us-east-1 xyz-789:eu-west-1 --csv --output flows.csv
+```
+
+CSV output includes all flow metadata for use in spreadsheets or other tools.
+
 ## Instance Specification Format
 
 ```
@@ -69,6 +87,9 @@ Examples:
 | `--profile NAME` | AWS named profile (optional) |
 | `--detail` | Show detailed block diffs for mismatches |
 | `--inventory` | List all flows across instances (instead of checking one flow) |
+| `--json` | Output results as JSON (pipe-friendly) |
+| `--csv` | Output results as CSV (for spreadsheets/scripting) |
+| `--output PATH` | Write output to file (with `--json` or `--csv`; default: stdout) |
 
 ## Hash Comparison
 

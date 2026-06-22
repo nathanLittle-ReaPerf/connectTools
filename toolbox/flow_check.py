@@ -7,9 +7,11 @@ Verify flow parity: quick hash comparison, detailed diffs, or full inventory.
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import sys
+from io import StringIO
 from pathlib import Path
 from typing import NamedTuple
 
@@ -115,12 +117,8 @@ def fetch_all_flows(client, instance_id: str) -> list[FlowInfo]:
         return []
 
 
-def quick_check(instances: list[Instance], flow_name: str, profile: str | None = None):
-    """Quick hash comparison of a flow across instances."""
-    print()
-    print(f"Flow: {flow_name}")
-    print("─" * 80)
-
+def quick_check(instances: list[Instance], flow_name: str, profile: str | None = None) -> dict:
+    """Quick hash comparison of a flow across instances. Returns results dict."""
     flows_by_hash = {}
     results = []
 
@@ -132,8 +130,9 @@ def quick_check(instances: list[Instance], flow_name: str, profile: str | None =
             results.append({
                 "label": inst.label,
                 "region": inst.region,
+                "flow_name": flow_name,
                 "hash": "NOT FOUND",
-                "status": "✗ MISSING",
+                "status": "MISSING",
             })
             continue
 
@@ -141,6 +140,7 @@ def quick_check(instances: list[Instance], flow_name: str, profile: str | None =
         results.append({
             "label": inst.label,
             "region": inst.region,
+            "flow_name": flow_name,
             "hash": content_hash,
             "status": "",
         })
@@ -156,31 +156,28 @@ def quick_check(instances: list[Instance], flow_name: str, profile: str | None =
 
         matching_count = len([f for f in flows_by_hash.get(result["hash"], [])])
         if matching_count == len(instances):
-            result["status"] = "✓ All Match"
+            result["status"] = "MATCH"
         elif matching_count > 1:
-            result["status"] = "✓ Match"
+            result["status"] = "MATCH"
         else:
-            result["status"] = "✗ DIFF"
+            result["status"] = "DIFF"
 
-    # Print table
-    print(f"{'Label':<20} {'Region':<15} {'Hash':<20} {'Status':<15}")
-    print("─" * 80)
-    for result in results:
-        print(f"{result['label']:<20} {result['region']:<15} {result['hash']:<20} {result['status']:<15}")
-    print()
-
-    # Summary
     unique_hashes = len(flows_by_hash)
-    if unique_hashes == 1:
-        print("✓ All flows are identical!")
-    else:
-        print(f"✗ Found {unique_hashes} different version(s)")
-    print()
+    return {
+        "mode": "quick",
+        "flow_name": flow_name,
+        "results": results,
+        "summary": {
+            "total_instances": len(instances),
+            "unique_hashes": unique_hashes,
+            "all_match": unique_hashes == 1,
+        }
+    }
 
 
-def detail_check(instances: list[Instance], flow_name: str, profile: str | None = None):
-    """Detailed comparison with block diffs."""
-    quick_check(instances, flow_name, profile)
+def detail_check(instances: list[Instance], flow_name: str, profile: str | None = None) -> dict:
+    """Detailed comparison with block diffs. Returns results dict."""
+    quick_results = quick_check(instances, flow_name, profile)
 
     # Fetch all flows
     flows = {}
@@ -190,43 +187,42 @@ def detail_check(instances: list[Instance], flow_name: str, profile: str | None 
         if flow:
             flows[inst.label] = flow
 
-    if len(flows) < 2:
-        print("Need at least 2 flows to compare")
-        return
+    comparisons = []
+    if len(flows) >= 2:
+        # Compare pairs
+        labels = list(flows.keys())
+        for i in range(len(labels) - 1):
+            for j in range(i + 1, len(labels)):
+                label_a, label_b = labels[i], labels[j]
+                flow_a, flow_b = flows[label_a], flows[label_b]
 
-    # Compare pairs
-    labels = list(flows.keys())
-    for i in range(len(labels) - 1):
-        for j in range(i + 1, len(labels)):
-            label_a, label_b = labels[i], labels[j]
-            flow_a, flow_b = flows[label_a], flows[label_b]
+                # Parse content
+                content_a = flow_a["content"] if isinstance(flow_a["content"], dict) else json.loads(flow_a["content"])
+                content_b = flow_b["content"] if isinstance(flow_b["content"], dict) else json.loads(flow_b["content"])
 
-            # Parse content
-            content_a = flow_a["content"] if isinstance(flow_a["content"], dict) else json.loads(flow_a["content"])
-            content_b = flow_b["content"] if isinstance(flow_b["content"], dict) else json.loads(flow_b["content"])
-
-            # Use flow_compare to get diffs
-            if content_a == content_b:
-                print(f"✓ {label_a} ↔ {label_b}: Identical")
-            else:
-                print(f"\n✗ {label_a} ↔ {label_b}: DIFFERENCES")
-                print("─" * 60)
-                # Show brief diff summary
                 blocks_a = content_a.get("Blocks", [])
                 blocks_b = content_b.get("Blocks", [])
-                print(f"  {label_a}: {len(blocks_a)} blocks")
-                print(f"  {label_b}: {len(blocks_b)} blocks")
-                if len(blocks_a) != len(blocks_b):
-                    print(f"  ⚠ Block count differs by {abs(len(blocks_a) - len(blocks_b))}")
-                print()
+
+                comparisons.append({
+                    "instance_a": label_a,
+                    "instance_b": label_b,
+                    "identical": content_a == content_b,
+                    "blocks_a": len(blocks_a),
+                    "blocks_b": len(blocks_b),
+                    "block_diff": abs(len(blocks_a) - len(blocks_b)),
+                })
+
+    return {
+        "mode": "detail",
+        "flow_name": flow_name,
+        "results": quick_results["results"],
+        "comparisons": comparisons,
+        "summary": quick_results["summary"],
+    }
 
 
-def inventory_check(instances: list[Instance], profile: str | None = None):
-    """Show all flows across instances."""
-    print()
-    print("Flow Inventory Across Instances")
-    print("─" * 100)
-
+def inventory_check(instances: list[Instance], profile: str | None = None) -> dict:
+    """Show all flows across instances. Returns results dict."""
     all_flows = {}
 
     for inst in instances:
@@ -236,30 +232,149 @@ def inventory_check(instances: list[Instance], profile: str | None = None):
         for flow in flows:
             if flow.name not in all_flows:
                 all_flows[flow.name] = {}
-            all_flows[flow.name][inst.label] = flow.content_hash
+            all_flows[flow.name][inst.label] = {
+                "hash": flow.content_hash,
+                "id": flow.id,
+                "arn": flow.arn,
+            }
 
-    # Print table
+    # Build results
+    results = []
+    for flow_name in sorted(all_flows.keys()):
+        hashes_by_instance = all_flows[flow_name]
+        unique_hashes = len(set(h["hash"] for h in hashes_by_instance.values()))
+
+        for instance_label, flow_data in sorted(hashes_by_instance.items()):
+            results.append({
+                "flow_name": flow_name,
+                "instance": instance_label,
+                "hash": flow_data["hash"],
+                "flow_id": flow_data["id"],
+                "arn": flow_data["arn"],
+                "match_status": "MATCH" if unique_hashes == 1 else "DIFF",
+            })
+
+    return {
+        "mode": "inventory",
+        "results": results,
+        "summary": {
+            "total_instances": len(instances),
+            "total_unique_flows": len(all_flows),
+        }
+    }
+
+
+def print_quick_check(data: dict):
+    """Print quick_check results in human-readable format."""
+    print()
+    print(f"Flow: {data['flow_name']}")
+    print("─" * 80)
+    print(f"{'Label':<20} {'Region':<15} {'Hash':<20} {'Status':<15}")
+    print("─" * 80)
+    for result in data["results"]:
+        status_display = {
+            "MATCH": "✓ Match",
+            "DIFF": "✗ DIFF",
+            "MISSING": "✗ MISSING",
+        }.get(result["status"], result["status"])
+        print(f"{result['label']:<20} {result['region']:<15} {result['hash']:<20} {status_display:<15}")
+    print()
+
+    summary = data["summary"]
+    if summary["all_match"]:
+        print("✓ All flows are identical!")
+    else:
+        print(f"✗ Found {summary['unique_hashes']} different version(s)")
+    print()
+
+
+def print_detail_check(data: dict):
+    """Print detail_check results in human-readable format."""
+    print_quick_check({
+        "flow_name": data["flow_name"],
+        "results": data["results"],
+        "summary": data["summary"],
+    })
+
+    for comp in data["comparisons"]:
+        if comp["identical"]:
+            print(f"✓ {comp['instance_a']} ↔ {comp['instance_b']}: Identical")
+        else:
+            print(f"\n✗ {comp['instance_a']} ↔ {comp['instance_b']}: DIFFERENCES")
+            print("─" * 60)
+            print(f"  {comp['instance_a']}: {comp['blocks_a']} blocks")
+            print(f"  {comp['instance_b']}: {comp['blocks_b']} blocks")
+            if comp["block_diff"] > 0:
+                print(f"  ⚠ Block count differs by {comp['block_diff']}")
+            print()
+
+
+def print_inventory_check(data: dict):
+    """Print inventory_check results in human-readable format."""
+    print()
+    print("Flow Inventory Across Instances")
+    print("─" * 100)
+
+    # Group by flow name for display
+    flows_by_name = {}
+    for result in data["results"]:
+        if result["flow_name"] not in flows_by_name:
+            flows_by_name[result["flow_name"]] = []
+        flows_by_name[result["flow_name"]].append(result)
+
     print(f"{'Flow Name':<40} {'Status':<15} {'Hashes':<45}")
     print("─" * 100)
 
-    for flow_name in sorted(all_flows.keys()):
-        hashes = all_flows[flow_name]
-        unique_hashes = len(set(hashes.values()))
+    for flow_name in sorted(flows_by_name.keys()):
+        results = flows_by_name[flow_name]
+        unique_hashes = len(set(r["hash"] for r in results))
 
-        if unique_hashes == 1:
-            status = "✓ All Match"
-        else:
-            status = f"✗ {unique_hashes} version(s)"
+        status = "✓ All Match" if unique_hashes == 1 else f"✗ {unique_hashes} version(s)"
 
-        hash_str = ", ".join([f"{label}:{h}" for label, h in sorted(hashes.items())])
+        hash_str = ", ".join([f"{r['instance']}:{r['hash']}" for r in sorted(results, key=lambda x: x["instance"])])
         if len(hash_str) > 45:
             hash_str = hash_str[:42] + "..."
 
         print(f"{flow_name:<40} {status:<15} {hash_str:<45}")
 
     print()
-    print(f"Total: {len(all_flows)} unique flows")
+    print(f"Total: {data['summary']['total_unique_flows']} unique flows")
     print()
+
+
+def export_to_csv(data: dict) -> str:
+    """Export data to CSV format."""
+    output = StringIO()
+
+    if data["mode"] in ("quick", "detail"):
+        writer = csv.DictWriter(output, fieldnames=["flow_name", "label", "region", "hash", "status"])
+        writer.writeheader()
+        for result in data["results"]:
+            writer.writerow({
+                "flow_name": result["flow_name"],
+                "label": result["label"],
+                "region": result["region"],
+                "hash": result["hash"],
+                "status": result["status"],
+            })
+    elif data["mode"] == "inventory":
+        writer = csv.DictWriter(output, fieldnames=["flow_name", "instance", "hash", "flow_id", "arn"])
+        writer.writeheader()
+        for result in data["results"]:
+            writer.writerow({
+                "flow_name": result["flow_name"],
+                "instance": result["instance"],
+                "hash": result["hash"],
+                "flow_id": result["flow_id"],
+                "arn": result["arn"],
+            })
+
+    return output.getvalue()
+
+
+def export_to_json(data: dict) -> str:
+    """Export data to JSON format."""
+    return json.dumps(data, indent=2)
 
 
 def main():
@@ -290,6 +405,9 @@ examples:
     p.add_argument("--profile", help="AWS named profile")
     p.add_argument("--detail", action="store_true", help="Show detailed block diffs for mismatches")
     p.add_argument("--inventory", action="store_true", help="Show all flows across instances")
+    p.add_argument("--json", action="store_true", help="Output as JSON")
+    p.add_argument("--csv", action="store_true", help="Output as CSV")
+    p.add_argument("--output", help="Write output to file (default: stdout)")
 
     args = p.parse_args()
 
@@ -302,15 +420,40 @@ examples:
 
     # Run appropriate check
     if args.inventory:
-        inventory_check(instances, args.profile)
+        data = inventory_check(instances, args.profile)
     elif args.flow:
         if args.detail:
-            detail_check(instances, args.flow, args.profile)
+            data = detail_check(instances, args.flow, args.profile)
         else:
-            quick_check(instances, args.flow, args.profile)
+            data = quick_check(instances, args.flow, args.profile)
     else:
         p.print_help()
         sys.exit(1)
+
+    # Format output
+    if args.json:
+        output = export_to_json(data)
+    elif args.csv:
+        output = export_to_csv(data)
+    else:
+        # Human-readable output
+        if data["mode"] == "quick":
+            print_quick_check(data)
+            return
+        elif data["mode"] == "detail":
+            print_detail_check(data)
+            return
+        elif data["mode"] == "inventory":
+            print_inventory_check(data)
+            return
+
+    # Write output to file or stdout
+    if args.output:
+        with open(args.output, "w") as f:
+            f.write(output)
+        print(f"Output written to {args.output}", file=sys.stderr)
+    else:
+        print(output)
 
 
 if __name__ == "__main__":
