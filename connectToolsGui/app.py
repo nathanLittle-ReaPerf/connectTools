@@ -31,6 +31,9 @@ import flow_analyze as fa
 import lambda_errors as le
 import log_insights as li
 
+sys.path.insert(0, str(Path(__file__).parent.parent / "toolbox"))
+import flow_check as fc_tool
+
 RETRY_CONFIG    = Config(retries={"max_attempts": 2, "mode": "standard"})
 AWS_CREDS_FILE  = Path.home() / ".aws" / "credentials"
 QUERIES_DIR     = Path(__file__).parent / "queries"
@@ -402,6 +405,7 @@ def render_sidebar() -> tuple:
             "Contact Diff": "Compare two contacts side-by-side. Spot differences in attributes, queues, agents, and sentiment.",
             "Lambda Errors": "Analyze Lambda failures across a time window. Group by error type, see affected contact IDs.",
             "Flow Analyze": "Scan flows for errors (broken refs, dead ends) and best-practice suggestions (UX, reliability, structure).",
+            "Flow Check": "Compare flows across regions/accounts. Quick hash comparison, detailed diffs, or full inventory with CSV/JSON export.",
             "Flow Replay": "Reconstruct and visualize a contact's flow path from CloudWatch logs. Interactive diagram with full-screen + PDF export.",
             "Log Insights": "Query CloudWatch Logs Insights against Connect log groups. Run saved queries, export to Excel with variable substitution.",
         }
@@ -418,6 +422,7 @@ def render_sidebar() -> tuple:
                 "Contact Diff": "↔️  Contact Diff",
                 "Lambda Errors": "⚡  Lambda Errors",
                 "Flow Analyze": "🔬  Flow Analyze",
+                "Flow Check": "↔️  Flow Check",
                 "Flow Replay": "🎬  Flow Replay",
                 "Log Insights": "📊  Log Insights",
             }.get(x, x),
@@ -1659,6 +1664,122 @@ def page_flow_analyze(active_name: str, active_meta: dict):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Page: Flow Check
+# ══════════════════════════════════════════════════════════════════════════════
+
+def page_flow_check():
+    st.header("↔️ Flow Check")
+    st.caption(
+        "Compare flows across regions and AWS accounts. Verify parity with quick hash comparison, "
+        "detailed block-level diffs, or full inventory scans. Export results as CSV or JSON."
+    )
+
+    mode = st.radio(
+        "Comparison mode",
+        ["Quick (hash)", "Detailed (diffs)", "Inventory (all flows)"],
+        horizontal=True,
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        instance_count = st.number_input("How many instances to compare?", min_value=2, max_value=5, value=2)
+
+    st.divider()
+
+    # ── Instance input ─────────────────────────────────────────────────────────
+    instances = []
+    cols = st.columns(instance_count)
+
+    for i in range(instance_count):
+        with cols[i]:
+            st.subheader(f"Instance {i + 1}")
+            iid = st.text_input(f"Instance ID {i + 1}", key=f"fc_iid_{i}", placeholder="xxxxxxxx-xxxx-xxxx...")
+            region = st.selectbox(
+                f"Region {i + 1}",
+                ["us-east-1", "us-west-2", "eu-west-1", "ca-central-1", "ap-southeast-1"],
+                key=f"fc_region_{i}",
+            )
+            label = st.text_input(f"Label {i + 1} (optional)", key=f"fc_label_{i}", placeholder="e.g., prod, dev")
+            if iid and region:
+                instances.append(f"{iid}:{region}:{label or region}")
+
+    if len(instances) < instance_count:
+        st.warning(f"Please fill in all {instance_count} instances")
+        return
+
+    st.divider()
+
+    # ── Mode-specific input ────────────────────────────────────────────────────
+    if mode == "Quick (hash)" or mode == "Detailed (diffs)":
+        flow_name = st.text_input(
+            "Flow name to compare",
+            placeholder="e.g., Main IVR",
+            help="The flow name (case-insensitive substring match)"
+        )
+        if not flow_name:
+            st.info("Enter a flow name to compare across instances")
+            return
+    else:
+        flow_name = None
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        export_format = st.radio("Export format", ["Human (display)", "JSON", "CSV"], horizontal=True)
+
+    with col2:
+        run_btn = st.button("🔍 Run Comparison", type="primary", use_container_width=True)
+
+    if not run_btn:
+        st.info("Click 'Run Comparison' to start")
+        return
+
+    # ── Run flow_check ────────────────────────────────────────────────────────
+    try:
+        with st.spinner(f"Comparing across {len(instances)} instance(s)…"):
+            # Determine mode for flow_check
+            if mode == "Quick (hash)":
+                data = fc_tool.quick_check([fc_tool.parse_instance_spec(i) for i in instances], flow_name)
+            elif mode == "Detailed (diffs)":
+                data = fc_tool.detail_check([fc_tool.parse_instance_spec(i) for i in instances], flow_name)
+            else:  # Inventory
+                data = fc_tool.inventory_check([fc_tool.parse_instance_spec(i) for i in instances])
+
+        # Display results
+        st.divider()
+        st.subheader("Results")
+
+        if export_format == "JSON":
+            st.json(data)
+            st.download_button(
+                label="⬇️ Download JSON",
+                data=json.dumps(data, indent=2),
+                file_name=f"flow_check_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json"
+            )
+        elif export_format == "CSV":
+            csv_data = fc_tool.export_to_csv(data)
+            st.download_button(
+                label="⬇️ Download CSV",
+                data=csv_data,
+                file_name=f"flow_check_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+            with st.expander("Preview"):
+                st.code(csv_data, language="csv")
+        else:
+            # Human-readable display
+            if data["mode"] in ("quick", "detail"):
+                fc_tool.print_quick_check(data)
+                st.success("✓ Comparison complete", icon="✅")
+            elif data["mode"] == "inventory":
+                fc_tool.print_inventory_check(data)
+                st.success("✓ Inventory complete", icon="✅")
+
+    except Exception as e:
+        st.error(f"Error running flow check: {str(e)}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Page: Flow Replay
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -2304,6 +2425,8 @@ def main():
         page_lambda_errors(active_name, active_meta)
     elif "Flow Analyze" in page:
         page_flow_analyze(active_name, active_meta)
+    elif "Flow Check" in page:
+        page_flow_check()
     elif "Flow Replay" in page:
         page_flow_replay(active_name, active_meta)
     elif "Log Insights" in page:
