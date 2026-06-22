@@ -394,23 +394,8 @@ def render_sidebar() -> tuple:
 
         st.divider()
 
-        # ── Navigation ────────────────────────────────────────────────────────
-        page = st.radio(
-            "Navigate",
-            ["🔑  Credentials",
-             "🔎  Contact Search",
-             "🔍  Contact Investigator",
-             "↔️  Contact Diff",
-             "⚡  Lambda Errors",
-             "🔬  Flow Analyze",
-             "🎬  Flow Replay",
-             "📊  Log Insights"],
-            key="nav",
-            label_visibility="collapsed",
-        )
-
-        # ── Menu tooltips (collapsible help) ──────────────────────────────────
-        menu_help = {
+        # ── Navigation with tooltips ──────────────────────────────────────────
+        menu_tooltips = {
             "Credentials": "Manage AWS profiles. Paste IAM Identity Center credentials and configure instance/region settings.",
             "Contact Search": "Find contacts by date range and filters (channel, queue, agent, attributes). Export to CSV/JSON.",
             "Contact Investigator": "Deep dive on a single contact: overview, timeline, Lambda traces, recordings, flow logs, Contact Lens transcript.",
@@ -420,9 +405,27 @@ def render_sidebar() -> tuple:
             "Flow Replay": "Reconstruct and visualize a contact's flow path from CloudWatch logs. Interactive diagram with full-screen + PDF export.",
             "Log Insights": "Query CloudWatch Logs Insights against Connect log groups. Run saved queries, export to Excel with variable substitution.",
         }
-        with st.expander("ℹ️ Menu Help", expanded=False):
-            for label, desc in menu_help.items():
-                st.caption(f"**{label}**  \n{desc}")
+
+        page = st.radio(
+            "Navigate",
+            list(menu_tooltips.keys()),
+            key="nav",
+            label_visibility="collapsed",
+            format_func=lambda x: {
+                "Credentials": "🔑  Credentials",
+                "Contact Search": "🔎  Contact Search",
+                "Contact Investigator": "🔍  Contact Investigator",
+                "Contact Diff": "↔️  Contact Diff",
+                "Lambda Errors": "⚡  Lambda Errors",
+                "Flow Analyze": "🔬  Flow Analyze",
+                "Flow Replay": "🎬  Flow Replay",
+                "Log Insights": "📊  Log Insights",
+            }.get(x, x),
+        )
+
+        # Show tooltip for currently selected page
+        if page in menu_tooltips:
+            st.info(f"ℹ️ {menu_tooltips[page]}", icon="ℹ️")
 
 
     return active_name, active_meta, page.strip().lstrip("🔑🔎🔍↔️⚡🔬🎬📊 ")
