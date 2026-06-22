@@ -425,7 +425,7 @@ def render_sidebar() -> tuple:
 
         # Show tooltip for currently selected page
         if page in menu_tooltips:
-            st.info(f"ℹ️ {menu_tooltips[page]}", icon="ℹ️")
+            st.info(menu_tooltips[page], icon="ℹ️")
 
 
     return active_name, active_meta, page.strip().lstrip("🔑🔎🔍↔️⚡🔬🎬📊 ")
