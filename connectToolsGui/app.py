@@ -1886,7 +1886,78 @@ def page_flow_replay(active_name: str, active_meta: dict):
 
     # Display diagram (full-screen or normal)
     if st.session_state._flow_replay_fullscreen:
-        components.html(html_content, height=900, scrolling=True)
+        # Wrap HTML with full-screen CSS and embedded PDF button
+        fullscreen_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+    html, body {{ height: 100%; width: 100%; overflow: hidden; }}
+    body {{ display: flex; flex-direction: column; background: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
+    .fs-toolbar {{
+        display: flex;
+        gap: 8px;
+        padding: 12px 16px;
+        background: #f8f9fa;
+        border-bottom: 1px solid #e0e0e0;
+        flex-shrink: 0;
+    }}
+    .fs-toolbar button {{
+        padding: 8px 12px;
+        border: 1px solid #ccc;
+        background: #fff;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+        transition: all 0.2s;
+    }}
+    .fs-toolbar button:hover {{
+        background: #f0f0f0;
+        border-color: #999;
+    }}
+    .diagram-container {{
+        flex: 1;
+        overflow: auto;
+        width: 100%;
+        padding: 16px;
+    }}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+    <div class="fs-toolbar">
+        <button onclick="savePDF()" title="Export diagram as PDF">📄 Save as PDF</button>
+        <span style="flex: 1;"></span>
+        <span style="font-size: 12px; color: #666;">Full-screen view • Press ESC to exit</span>
+    </div>
+    <div class="diagram-container">
+        {html_content}
+    </div>
+    <script>
+    function savePDF() {{
+        const container = document.querySelector('.diagram-container');
+        const opt = {{
+            margin: 5,
+            filename: 'replay_{cid8}.pdf',
+            image: {{ type: 'jpeg', quality: 0.95 }},
+            html2canvas: {{ scale: 2, logging: false, useCORS: true }},
+            jsPDF: {{ orientation: 'landscape', unit: 'mm', format: 'a4' }}
+        }};
+        html2pdf().set(opt).from(container).save();
+    }}
+    // ESC key to exit full-screen
+    document.addEventListener('keydown', function(e) {{
+        if (e.key === 'Escape') {{
+            window.parent.postMessage('exit-fullscreen', '*');
+        }}
+    }});
+    </script>
+</body>
+</html>
+"""
+        components.html(fullscreen_html, height=None, scrolling=True)
     else:
         components.html(html_content, height=720, scrolling=False)
 
