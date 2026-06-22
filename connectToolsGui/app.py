@@ -409,6 +409,22 @@ def render_sidebar() -> tuple:
             label_visibility="collapsed",
         )
 
+        # ── Menu tooltips (collapsible help) ──────────────────────────────────
+        menu_help = {
+            "Credentials": "Manage AWS profiles. Paste IAM Identity Center credentials and configure instance/region settings.",
+            "Contact Search": "Find contacts by date range and filters (channel, queue, agent, attributes). Export to CSV/JSON.",
+            "Contact Investigator": "Deep dive on a single contact: overview, timeline, Lambda traces, recordings, flow logs, Contact Lens transcript.",
+            "Contact Diff": "Compare two contacts side-by-side. Spot differences in attributes, queues, agents, and sentiment.",
+            "Lambda Errors": "Analyze Lambda failures across a time window. Group by error type, see affected contact IDs.",
+            "Flow Analyze": "Scan flows for errors (broken refs, dead ends) and best-practice suggestions (UX, reliability, structure).",
+            "Flow Replay": "Reconstruct and visualize a contact's flow path from CloudWatch logs. Interactive diagram with full-screen + PDF export.",
+            "Log Insights": "Query CloudWatch Logs Insights against Connect log groups. Run saved queries, export to Excel with variable substitution.",
+        }
+        with st.expander("ℹ️ Menu Help", expanded=False):
+            for label, desc in menu_help.items():
+                st.caption(f"**{label}**  \n{desc}")
+
+
     return active_name, active_meta, page.strip().lstrip("🔑🔎🔍↔️⚡🔬🎬📊 ")
 
 
