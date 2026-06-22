@@ -318,7 +318,36 @@ def to_html(nodes, edges, start_id, flow_name):
     #zoom-label {{ font-size: 0.85rem; color: #666; min-width: 46px; text-align: center; }}
 
     /* ── Diagram canvas ── */
-    #cy {{ flex: 1; }}
+    #cy {{ flex: 1; position: relative; }}
+
+    /* ── Minimap ── */
+    #minimap-toggle {{
+      position: fixed; bottom: 16px; right: 16px; z-index: 200;
+      padding: 8px 12px; background: white; border: 1px solid #ccc;
+      border-radius: 4px; cursor: pointer; font-size: 0.85rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: all 0.2s;
+    }}
+    #minimap-toggle:hover {{ background: #f5f5f5; }}
+    #minimap-toggle.active {{ background: #E3F2FD; border-color: #90CAF9; }}
+    #minimap-container {{
+      position: fixed; bottom: 16px; right: 16px; z-index: 201;
+      width: 200px; height: 150px; background: white;
+      border: 1px solid #ccc; border-radius: 4px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+      display: none; flex-direction: column;
+    }}
+    #minimap-container.open {{ display: flex; }}
+    .minimap-header {{
+      padding: 6px 10px; border-bottom: 1px solid #eee;
+      font-size: 0.8rem; font-weight: 600; color: #666;
+      display: flex; justify-content: space-between; align-items: center;
+    }}
+    .minimap-header button {{
+      padding: 2px 6px; font-size: 0.9rem; border: none;
+      background: none; cursor: pointer; color: #888;
+    }}
+    .minimap-header button:hover {{ color: #333; }}
+    #minimap {{ flex: 1; border-radius: 2px; overflow: hidden; }}
 
     /* ── Color panel ── */
     #color-panel {{
@@ -397,6 +426,15 @@ def to_html(nodes, edges, start_id, flow_name):
   <div id="cy"></div>
 
   <!-- Slide-in color panel -->
+  <button id="minimap-toggle" title="Toggle minimap">🗺️ Minimap</button>
+  <div id="minimap-container">
+    <div class="minimap-header">
+      <span>Overview</span>
+      <button id="minimap-close" title="Close">×</button>
+    </div>
+    <div id="minimap"></div>
+  </div>
+
   <div id="color-panel">
     <div class="panel-header">
       <span>Colors</span>
@@ -475,6 +513,8 @@ def to_html(nodes, edges, start_id, flow_name):
   <script src="https://cdn.jsdelivr.net/npm/cytoscape@3/dist/cytoscape.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-minimap@2.7.6/cytoscape-minimap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-panzoom@2.5.1/cytoscape-panzoom.min.js"></script>
   <script>
     // ── Cytoscape init ────────────────────────────────────────────────────────
     const cy = cytoscape({{
@@ -531,6 +571,33 @@ def to_html(nodes, edges, start_id, flow_name):
         nodeSep: 60, rankSep: 80, edgeSep: 20, padding: 40,
         animate: false, fit: true,
       }}
+    }});
+
+    // ── Minimap (for flows with 50+ blocks) ───────────────────────────────────
+    const nodeCount = cy.nodes().length;
+    if (nodeCount >= 50) {{
+      const minimap = cy.minimap({{
+        container: document.getElementById('minimap'),
+        width: 200,
+        height: 150,
+        nodeTip: true,
+        expansionFactor: 1.75,
+      }});
+      // Auto-show minimap for large flows
+      document.getElementById('minimap-container').classList.add('open');
+      document.getElementById('minimap-toggle').classList.add('active');
+    }}
+
+    // Minimap toggle
+    const minimapToggle = document.getElementById('minimap-toggle');
+    const minimapContainer = document.getElementById('minimap-container');
+    minimapToggle.addEventListener('click', () => {{
+      minimapContainer.classList.toggle('open');
+      minimapToggle.classList.toggle('active');
+    }});
+    document.getElementById('minimap-close').addEventListener('click', () => {{
+      minimapContainer.classList.remove('open');
+      minimapToggle.classList.remove('active');
     }});
 
     // ── Zoom controls ─────────────────────────────────────────────────────────
